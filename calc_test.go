@@ -16,6 +16,7 @@ func TestExpr(t *testing.T) {
 		{"13 + 5", 18},
 		{"  13 +    5", 18},
 		{"12 - 24", -12},
+		{"12 - 24 + 6-37", -43},
 	}
 	for _, test := range tests {
 		v, err := expr(test.text)

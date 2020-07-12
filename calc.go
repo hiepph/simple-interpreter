@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 )
@@ -20,14 +21,15 @@ const (
 	MINUS Operator = "MINUS"
 )
 
-var operatorDictionary = map[byte]Operator{
-	'+': PLUS,
-	'-': MINUS,
+var operatorDictionary = map[string]Operator{
+	"+": PLUS,
+	"-": MINUS,
 }
 
 type Token struct {
-	kind  tokenKind
-	value string
+	kind     tokenKind
+	value    string
+	intValue int
 }
 
 func isDigit(c byte) bool {
@@ -39,16 +41,12 @@ func isSpace(c byte) bool {
 }
 
 func isOperator(c byte) bool {
-	_, found := operatorDictionary[c]
+	_, found := operatorDictionary[string(c)]
 	return found
 }
 
-func toInteger(s string) int {
-	v, _ := strconv.Atoi(s)
-	return v
-}
-
 func expr(text string) (int, error) {
+	// 1. lexing: decompose string into tokens
 	tokens := make([]Token, 0)
 	i := 0
 	for i < len(text) {
@@ -60,40 +58,60 @@ func expr(text string) (int, error) {
 			for ; j < len(text) && isDigit(text[j]); j++ {
 			}
 
-			tokens = append(tokens, Token{numericKind, text[i:j]})
+			tokens = append(tokens,
+				Token{numericKind, text[i:j], -1})
 			i = j
 		case isSpace(c):
 			i++
 		case isOperator(c):
-			op, _ := operatorDictionary[c]
-			tokens = append(tokens, Token{operatorKind, string(op)})
+			tokens = append(tokens,
+				Token{operatorKind, string(c), -1})
 			i++
 		default:
-			return -1, errors.New("Error parsing input")
+			return -1, errors.New("Error lexing input")
 		}
 
 	}
 
-	patterns := []tokenKind{numericKind, operatorKind, numericKind}
-	for i, _ := range tokens {
-		if tokens[i].kind != patterns[i] {
-			return -1, errors.New("Error parsing patterns")
+	// 2. parser: convert tokens into values based on their kinds
+	for i, token := range tokens {
+		if token.kind == numericKind {
+			value, err := strconv.Atoi(token.value)
+			if err != nil {
+				return -1, errors.New("Error parsing tokens")
+			}
+
+			tokens[i].intValue = value
+		} else if token.kind == operatorKind {
+			op, _ := operatorDictionary[token.value]
+			tokens[i].value = string(op)
 		}
 	}
 
-	switch tokens[1].value {
-	case "PLUS":
-		return toInteger(tokens[0].value) + toInteger(tokens[2].value), nil
-	case "MINUS":
-		return toInteger(tokens[0].value) - toInteger(tokens[2].value), nil
+	// 3. interpreter: generate result
+	result := tokens[0].intValue
+	for i := 1; i < len(tokens); {
+		if tokens[i].kind == operatorKind {
+			switch tokens[i].value {
+			case "PLUS":
+				result += tokens[i+1].intValue
+			case "MINUS":
+				result -= tokens[i+1].intValue
+			}
+
+			i += 2
+		} else {
+			i++
+		}
 	}
 
-	return -1, errors.New("Error parsing values")
+	return result, nil
 }
 
 func main() {
-	_, err := expr("13 + 5")
+	v, err := expr("13 + 5 - 12")
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println(v)
 }
