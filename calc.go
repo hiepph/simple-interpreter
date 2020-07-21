@@ -50,6 +50,16 @@ func isOperator(c byte) bool {
 	return found
 }
 
+func contains(arr []string, s string) bool {
+	for _, el := range arr {
+		if el == s {
+			return true
+		}
+	}
+
+	return false
+}
+
 func lex(text string) ([]Token, error) {
 	tokens := make([]Token, 0)
 	i := 0
@@ -129,15 +139,14 @@ func (itpr *Interpreter) factor() (int, error) {
 	return token.intValue, nil
 }
 
-func (itpr Interpreter) expr() (int, error) {
-	// expr: factor ((MUL|DIV)factor)*
-	// factor: INTEGER
+func (itpr *Interpreter) term() (int, error) {
 	result, err := itpr.factor()
 	if err != nil {
 		return -1, err
 	}
 
-	for itpr.currentToken().kind == operatorKind {
+	for itpr.currentToken().kind == operatorKind &&
+		contains([]string{"MUL", "DIV"}, itpr.currentToken().value) {
 		token := itpr.currentToken()
 		switch token.value {
 		case "MUL":
@@ -148,6 +157,33 @@ func (itpr Interpreter) expr() (int, error) {
 			itpr.eat(operatorKind)
 			v, _ := itpr.factor()
 			result /= v
+		}
+	}
+
+	return result, nil
+}
+
+func (itpr Interpreter) expr() (int, error) {
+	// expr: term ((MUL|DIV)term)*
+	// term: factor ((MUL|DIV)factor)*
+	// factor: INTEGER
+	result, err := itpr.term()
+	if err != nil {
+		return -1, err
+	}
+
+	for itpr.currentToken().kind == operatorKind &&
+		contains([]string{"PLUS", "MINUS"}, itpr.currentToken().value) {
+		token := itpr.currentToken()
+		switch token.value {
+		case "PLUS":
+			itpr.eat(operatorKind)
+			v, _ := itpr.term()
+			result += v
+		case "MINUS":
+			itpr.eat(operatorKind)
+			v, _ := itpr.term()
+			result -= v
 		}
 	}
 
@@ -174,7 +210,7 @@ func interprete(text string) (int, error) {
 }
 
 func main() {
-	v, err := interprete("10 * 4  * 2 * 3 / 8")
+	v, err := interprete("7 * 2 + 8 - 2 / 2 + 3 * 10 / 2")
 	if err != nil {
 		log.Fatal(err)
 	}
