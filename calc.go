@@ -18,10 +18,12 @@ const (
 type Operator string
 
 const (
-	PLUS  Operator = "PLUS"
-	MINUS Operator = "MINUS"
-	MUL   Operator = "MUL"
-	DIV   Operator = "DIV"
+	PLUS   Operator = "PLUS"
+	MINUS  Operator = "MINUS"
+	MUL    Operator = "MUL"
+	DIV    Operator = "DIV"
+	LPAREN Operator = "LPAREN"
+	RPAREN Operator = "RPAREN"
 )
 
 var operatorDictionary = map[string]Operator{
@@ -29,6 +31,8 @@ var operatorDictionary = map[string]Operator{
 	"-": MINUS,
 	"*": MUL,
 	"/": DIV,
+	"(": LPAREN,
+	")": RPAREN,
 }
 
 type Token struct {
@@ -120,23 +124,47 @@ func (itpr Interpreter) currentToken() Token {
 	return itpr.tokens[itpr.cur]
 }
 
-func (itpr *Interpreter) eat(kind tokenKind) error {
-	if itpr.currentToken().kind == kind {
+func (itpr *Interpreter) eat(kind tokenKind, value string) error {
+	token := itpr.currentToken()
+	if (kind == numericKind && token.kind == kind) ||
+		(token.kind == kind && token.value == value) {
 		itpr.cur++
 		return nil
 	}
 
-	return errors.New("Error eating tokens")
+	return errors.New(fmt.Sprintf("Error eating tokens %d."+
+		"want: %v, actual: %v", itpr.cur, value, token.value))
 }
 
 func (itpr *Interpreter) factor() (int, error) {
 	token := itpr.currentToken()
-	err := itpr.eat(numericKind)
-	if err != nil {
-		return -1, err
+
+	switch token.kind {
+	case numericKind:
+		err := itpr.eat(numericKind, "INTEGER")
+		if err != nil {
+			return -1, err
+		}
+		return token.intValue, nil
+	case operatorKind:
+		if token.value == "LPAREN" {
+			err := itpr.eat(operatorKind, "LPAREN")
+			if err != nil {
+				return -1, err
+			}
+			result, err := itpr.expr()
+			if err != nil {
+				return -1, err
+			}
+			err = itpr.eat(operatorKind, "RPAREN")
+			if err != nil {
+				return -1, err
+			}
+			return result, nil
+		}
 	}
 
-	return token.intValue, nil
+	return -1, errors.New("Error factor")
 }
 
 func (itpr *Interpreter) term() (int, error) {
@@ -150,12 +178,24 @@ func (itpr *Interpreter) term() (int, error) {
 		token := itpr.currentToken()
 		switch token.value {
 		case "MUL":
-			itpr.eat(operatorKind)
-			v, _ := itpr.factor()
+			err := itpr.eat(operatorKind, "MUL")
+			if err != nil {
+				return -1, err
+			}
+			v, err := itpr.factor()
+			if err != nil {
+				return -1, err
+			}
 			result *= v
 		case "DIV":
-			itpr.eat(operatorKind)
-			v, _ := itpr.factor()
+			err := itpr.eat(operatorKind, "DIV")
+			if err != nil {
+				return -1, err
+			}
+			v, err := itpr.factor()
+			if err != nil {
+				return -1, err
+			}
 			result /= v
 		}
 	}
@@ -163,10 +203,10 @@ func (itpr *Interpreter) term() (int, error) {
 	return result, nil
 }
 
-func (itpr Interpreter) expr() (int, error) {
+func (itpr *Interpreter) expr() (int, error) {
 	// expr: term ((MUL|DIV)term)*
 	// term: factor ((MUL|DIV)factor)*
-	// factor: INTEGER
+	// factor: INTEGER | LPAREN expr RPAREN
 	result, err := itpr.term()
 	if err != nil {
 		return -1, err
@@ -177,12 +217,24 @@ func (itpr Interpreter) expr() (int, error) {
 		token := itpr.currentToken()
 		switch token.value {
 		case "PLUS":
-			itpr.eat(operatorKind)
-			v, _ := itpr.term()
+			err := itpr.eat(operatorKind, "PLUS")
+			if err != nil {
+				return -1, err
+			}
+			v, err := itpr.term()
+			if err != nil {
+				return -1, err
+			}
 			result += v
 		case "MINUS":
-			itpr.eat(operatorKind)
-			v, _ := itpr.term()
+			err := itpr.eat(operatorKind, "MINUS")
+			if err != nil {
+				return -1, err
+			}
+			v, err := itpr.term()
+			if err != nil {
+				return -1, err
+			}
 			result -= v
 		}
 	}
@@ -210,7 +262,7 @@ func interprete(text string) (int, error) {
 }
 
 func main() {
-	v, err := interprete("7 * 2 + 8 - 2 / 2 + 3 * 10 / 2")
+	v, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
 	if err != nil {
 		log.Fatal(err)
 	}

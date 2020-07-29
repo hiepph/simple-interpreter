@@ -17,11 +17,16 @@ func TestExpr(t *testing.T) {
 		{"  13 +    5", 18},
 		{"12 - 24", -12},
 		{"12 - 24 + 6-37", -43},
+		{"7 * 2 + 8 - 2 / 2 + 3 * 10 / 2", 36},
+		{"7 * 2 + 8 - 2 / 2 + 3 * 10 / 2", 36},
+		{"2 * (7 + 3)", 20},
+		{"7 + 3 * (10 / (12 / (3 + 1) - 1))", 22},
+		{"7 + (((3+2)))", 12},
 	}
 	for _, test := range tests {
-		v, err := expr(test.text)
+		v, err := interprete(test.text)
 		if assert.NoError(t, err, test.text) {
-			assert.Equal(t, v, test.want)
+			assert.Equal(t, test.want, v, test.text)
 		}
 	}
 }
