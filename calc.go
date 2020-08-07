@@ -41,6 +41,26 @@ type Token struct {
 	intValue int
 }
 
+type AST interface {
+}
+
+type BinOp struct {
+	Left  AST
+	Op    Token
+	Right AST
+}
+
+type Num struct {
+	Token Token
+	Value int
+}
+
+func NewNum(token Token) Num {
+	num := Num{Token: token}
+	num.Value = token.intValue
+	return num
+}
+
 func isDigit(c byte) bool {
 	return '0' <= c && c <= '9'
 }
@@ -136,41 +156,41 @@ func (itpr *Interpreter) eat(kind tokenKind, value string) error {
 		"want: %v, actual: %v", itpr.cur, value, token.value))
 }
 
-func (itpr *Interpreter) factor() (int, error) {
+func (itpr *Interpreter) factor() (AST, error) {
 	token := itpr.currentToken()
 
 	switch token.kind {
 	case numericKind:
 		err := itpr.eat(numericKind, "INTEGER")
 		if err != nil {
-			return -1, err
+			return nil, err
 		}
-		return token.intValue, nil
+		return NewNum(token), nil
 	case operatorKind:
 		if token.value == "LPAREN" {
 			err := itpr.eat(operatorKind, "LPAREN")
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
-			result, err := itpr.expr()
+			node, err := itpr.expr()
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
 			err = itpr.eat(operatorKind, "RPAREN")
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
-			return result, nil
+			return node, nil
 		}
 	}
 
-	return -1, errors.New("Error factor")
+	return nil, errors.New("Error factor")
 }
 
-func (itpr *Interpreter) term() (int, error) {
-	result, err := itpr.factor()
+func (itpr *Interpreter) term() (AST, error) {
+	node, err := itpr.factor()
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 
 	for itpr.currentToken().kind == operatorKind &&
@@ -180,36 +200,31 @@ func (itpr *Interpreter) term() (int, error) {
 		case "MUL":
 			err := itpr.eat(operatorKind, "MUL")
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
-			v, err := itpr.factor()
-			if err != nil {
-				return -1, err
-			}
-			result *= v
 		case "DIV":
 			err := itpr.eat(operatorKind, "DIV")
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
-			v, err := itpr.factor()
-			if err != nil {
-				return -1, err
-			}
-			result /= v
 		}
+		rightNode, err := itpr.factor()
+		if err != nil {
+			return nil, err
+		}
+		node = BinOp{Left: node, Op: token, Right: rightNode}
 	}
 
-	return result, nil
+	return node, nil
 }
 
-func (itpr *Interpreter) expr() (int, error) {
+func (itpr *Interpreter) expr() (AST, error) {
 	// expr: term ((MUL|DIV)term)*
 	// term: factor ((MUL|DIV)factor)*
 	// factor: INTEGER | LPAREN expr RPAREN
-	result, err := itpr.term()
+	node, err := itpr.term()
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 
 	for itpr.currentToken().kind == operatorKind &&
@@ -219,31 +234,26 @@ func (itpr *Interpreter) expr() (int, error) {
 		case "PLUS":
 			err := itpr.eat(operatorKind, "PLUS")
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
-			v, err := itpr.term()
-			if err != nil {
-				return -1, err
-			}
-			result += v
 		case "MINUS":
 			err := itpr.eat(operatorKind, "MINUS")
 			if err != nil {
-				return -1, err
+				return nil, err
 			}
-			v, err := itpr.term()
-			if err != nil {
-				return -1, err
-			}
-			result -= v
 		}
+		rightNode, err := itpr.term()
+		if err != nil {
+			return nil, err
+		}
+		node = BinOp{Left: node, Op: token, Right: rightNode}
 	}
 
-	return result, nil
+	return node, nil
 }
 
 ///// main flow
-func interprete(text string) (int, error) {
+func interprete(text string) (AST, error) {
 	// 1. lexing: decompose string into tokens
 	tokens, err := lex(text)
 	if err != nil {
@@ -262,9 +272,10 @@ func interprete(text string) (int, error) {
 }
 
 func main() {
-	v, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
+	// v, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
+	v, err := interprete("2 +7 * 3")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(v)
+	fmt.Printf("%+v\n", v)
 }
