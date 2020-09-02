@@ -24,7 +24,10 @@ func TestExpr(t *testing.T) {
 		{"7 + (((3+2)))", 12},
 	}
 	for _, test := range tests {
-		v, err := interprete(test.text)
+		node, err := interprete(test.text)
+		assert.NoError(t, err, test.text)
+
+		v, err := visit(node)
 		if assert.NoError(t, err, test.text) {
 			assert.Equal(t, test.want, v, test.text)
 		}

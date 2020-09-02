@@ -252,6 +252,47 @@ func (itpr *Interpreter) expr() (AST, error) {
 	return node, nil
 }
 
+func visitBinOp(node AST) (int, error) {
+	nodeBinOp := node.(BinOp)
+
+	left, err := visit(nodeBinOp.Left)
+	if err != nil {
+		return -1, err
+	}
+	right, err := visit(nodeBinOp.Right)
+	if err != nil {
+		return -1, err
+	}
+
+	switch nodeBinOp.Op.value {
+	case "PLUS":
+		return left + right, nil
+	case "MINUS":
+		return left - right, nil
+	case "MUL":
+		return left * right, nil
+	case "DIV":
+		return left / right, nil
+	default:
+		return -1, errors.New("Unkown Op")
+	}
+}
+
+func visitNum(node AST) (int, error) {
+	return node.(Num).Value, nil
+}
+
+func visit(node AST) (int, error) {
+	switch node.(type) {
+	case BinOp:
+		return visitBinOp(node)
+	case Num:
+		return visitNum(node)
+	default:
+		return -1, errors.New("Unknown node type")
+	}
+}
+
 ///// main flow
 func interprete(text string) (AST, error) {
 	// 1. lexing: decompose string into tokens
@@ -272,10 +313,16 @@ func interprete(text string) (AST, error) {
 }
 
 func main() {
-	// v, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
-	v, err := interprete("2 +7 * 3")
+	node, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
+	// node, err := interprete("2 * 7 + 3")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%+v\n", v)
+	fmt.Printf("%+v\n", node)
+
+	v, err := visit(node)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(v)
 }
