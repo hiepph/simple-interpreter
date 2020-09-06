@@ -50,6 +50,11 @@ type BinOp struct {
 	Right AST
 }
 
+type UnaryOp struct {
+	Op   Token
+	expr AST
+}
+
 type Num struct {
 	Token Token
 	Value int
@@ -181,6 +186,14 @@ func (itpr *Interpreter) factor() (AST, error) {
 				return nil, err
 			}
 			return node, nil
+		} else if token.value == "PLUS" || token.value == "MINUS" {
+			err := itpr.eat(operatorKind, token.value)
+			fact, err := itpr.factor()
+			if err != nil {
+				return nil, err
+			}
+			node := UnaryOp{Op: token, expr: fact}
+			return node, nil
 		}
 	}
 
@@ -221,7 +234,7 @@ func (itpr *Interpreter) term() (AST, error) {
 func (itpr *Interpreter) expr() (AST, error) {
 	// expr: term ((MUL|DIV)term)*
 	// term: factor ((MUL|DIV)factor)*
-	// factor: INTEGER | LPAREN expr RPAREN
+	// factor: (PLUS|MINUS) factor | INTEGER | LPAREN expr RPAREN
 	node, err := itpr.term()
 	if err != nil {
 		return nil, err
@@ -282,12 +295,32 @@ func visitNum(node AST) (int, error) {
 	return node.(Num).Value, nil
 }
 
+func visitUnaryOp(node AST) (int, error) {
+	n, ok := node.(UnaryOp)
+	if !ok {
+		return -1, errors.New("Error Unary Op")
+	}
+	switch n.Op.value {
+	case "PLUS":
+		return visit(n.expr)
+	case "MINUS":
+		v, err := visit(n.expr)
+		if err != nil {
+			return -1, err
+		}
+		return -v, err
+	}
+	return -1, errors.New("Error visiting Unary Op")
+}
+
 func visit(node AST) (int, error) {
 	switch node.(type) {
 	case BinOp:
 		return visitBinOp(node)
 	case Num:
 		return visitNum(node)
+	case UnaryOp:
+		return visitUnaryOp(node)
 	default:
 		return -1, errors.New("Unknown node type")
 	}
@@ -313,8 +346,9 @@ func interprete(text string) (AST, error) {
 }
 
 func main() {
-	node, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
+	// node, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
 	// node, err := interprete("2 * 7 + 3")
+	node, err := interprete("5-+-2")
 	if err != nil {
 		log.Fatal(err)
 	}

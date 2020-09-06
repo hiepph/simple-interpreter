@@ -22,6 +22,7 @@ func TestExpr(t *testing.T) {
 		{"2 * (7 + 3)", 20},
 		{"7 + 3 * (10 / (12 / (3 + 1) - 1))", 22},
 		{"7 + (((3+2)))", 12},
+		{"5---2", 3},
 	}
 	for _, test := range tests {
 		node, err := interprete(test.text)
