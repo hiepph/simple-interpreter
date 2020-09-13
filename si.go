@@ -13,6 +13,11 @@ const (
 	numericKind tokenKind = iota
 	operatorKind
 	EOFKind
+	keywordKind
+	IDKind
+	assignKind
+	semiKind
+	dotKind
 )
 
 type Operator string
@@ -34,6 +39,8 @@ var operatorDictionary = map[string]Operator{
 	"(": LPAREN,
 	")": RPAREN,
 }
+
+var keywordList = []string{"BEGIN", "END"}
 
 type Token struct {
 	kind     tokenKind
@@ -70,6 +77,10 @@ func isDigit(c byte) bool {
 	return '0' <= c && c <= '9'
 }
 
+func isChar(c byte) bool {
+	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+}
+
 func isSpace(c byte) bool {
 	return c-' ' == 0
 }
@@ -94,27 +105,55 @@ func lex(text string) ([]Token, error) {
 	i := 0
 	for i < len(text) {
 		c := text[i]
+		// fmt.Println(i, string(c))
 		switch {
 		case isDigit(c):
 			j := i
-			// multiple-digits
+			// multiple digits
 			for ; j < len(text) && isDigit(text[j]); j++ {
 			}
 
 			tokens = append(tokens,
 				Token{numericKind, text[i:j], -1})
 			i = j
+			continue
 		case isSpace(c):
-			i++
 		case isOperator(c):
 			tokens = append(tokens,
 				Token{operatorKind, string(c), -1})
+		case isChar(c):
+			// multiple characters
+			j := i
+			for ; j < len(text) && (isDigit(text[j]) || isChar(text[j])); j++ {
+			}
+			s := text[i:j]
+			if contains(keywordList, s) {
+				tokens = append(tokens,
+					Token{keywordKind, s, -1})
+			} else {
+				tokens = append(tokens,
+					Token{IDKind, s, -1})
+			}
+			i = j
+			continue
+		case c == ':' && text[i+1] == '=':
+			tokens = append(tokens,
+				Token{assignKind, ":=", -1})
 			i++
+		case c == ';':
+			tokens = append(tokens,
+				Token{semiKind, ";", -1})
+		case c == '.':
+			tokens = append(tokens,
+				Token{dotKind, ".", -1})
 		default:
 			return tokens, errors.New("Error lexing input")
 		}
+		i++
 	}
 
+	tokens = append(tokens,
+		Token{EOFKind, "", -1})
 	return tokens, nil
 }
 
@@ -345,18 +384,26 @@ func interprete(text string) (AST, error) {
 	return interpreter.expr()
 }
 
-func main() {
-	// node, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
-	// node, err := interprete("2 * 7 + 3")
-	node, err := interprete("5-+-2")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("%+v\n", node)
+// func main() {
+// 	// node, err := interprete("7 + 3 * (10 / (12 / (3 + 1) - 1))")
+// 	// node, err := interprete("2 * 7 + 3")
+// 	node, err := interprete("5-+-2")
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	fmt.Printf("%+v\n", node)
 
-	v, err := visit(node)
+// 	v, err := visit(node)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	fmt.Println(v)
+// }
+
+func main() {
+	tokens, err := lex("BEGIN a := 2; END.")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(v)
+	fmt.Println(tokens)
 }
