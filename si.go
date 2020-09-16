@@ -73,6 +73,29 @@ func NewNum(token Token) Num {
 	return num
 }
 
+type Compound struct {
+	Children []AST
+}
+
+type Assign struct {
+	Left  AST
+	Op    Token
+	Right AST
+}
+
+type Var struct {
+	Token Token
+	Value int // ?
+}
+
+func NewVar(token Token) Var {
+	v := Var{Token: token}
+	v.Value = token.intValue
+	return v
+}
+
+type NoOp struct{}
+
 func isDigit(c byte) bool {
 	return '0' <= c && c <= '9'
 }
@@ -82,7 +105,7 @@ func isChar(c byte) bool {
 }
 
 func isSpace(c byte) bool {
-	return c-' ' == 0
+	return c-' ' == 0 || c-'\n' == 0
 }
 
 func isOperator(c byte) bool {
@@ -100,6 +123,7 @@ func contains(arr []string, s string) bool {
 	return false
 }
 
+/////// LEXER
 func lex(text string) ([]Token, error) {
 	tokens := make([]Token, 0)
 	i := 0
@@ -154,10 +178,7 @@ func lex(text string) ([]Token, error) {
 
 	tokens = append(tokens,
 		Token{EOFKind, "", -1})
-	return tokens, nil
-}
 
-func parse(tokens []Token) ([]Token, error) {
 	for i, token := range tokens {
 		if token.kind == numericKind {
 			value, err := strconv.Atoi(token.value)
@@ -175,92 +196,216 @@ func parse(tokens []Token) ([]Token, error) {
 	return tokens, nil
 }
 
-/////// INTERPRETER
-type Interpreter struct {
+/////// PARSER
+type Parser struct {
 	tokens []Token
 	cur    int
 }
 
-func (itpr Interpreter) currentToken() Token {
-	if itpr.cur >= len(itpr.tokens) {
-		return Token{EOFKind, "", -1}
-	}
-	return itpr.tokens[itpr.cur]
+func NewParser(tokens []Token) Parser {
+	return Parser{tokens: tokens, cur: 0}
 }
 
-func (itpr *Interpreter) eat(kind tokenKind, value string) error {
-	token := itpr.currentToken()
+func (parser Parser) currentToken() Token {
+	if parser.cur >= len(parser.tokens) {
+		return Token{EOFKind, "", -1}
+	}
+	return parser.tokens[parser.cur]
+}
+
+func (parser *Parser) eatOnlyKind(kind tokenKind) error {
+	token := parser.currentToken()
+	if token.kind == kind {
+		parser.cur++
+		return nil
+	}
+	return errors.New(fmt.Sprintf("Error eating tokens %d."+
+		"want: %v, actual: %v", parser.cur, kind, token.kind))
+}
+
+func (parser *Parser) eat(kind tokenKind, value string) error {
+	token := parser.currentToken()
 	if (kind == numericKind && token.kind == kind) ||
 		(token.kind == kind && token.value == value) {
-		itpr.cur++
+		parser.cur++
 		return nil
 	}
 
 	return errors.New(fmt.Sprintf("Error eating tokens %d."+
-		"want: %v, actual: %v", itpr.cur, value, token.value))
+		"want: %v, actual: %v", parser.cur, value, token.value))
 }
 
-func (itpr *Interpreter) factor() (AST, error) {
-	token := itpr.currentToken()
+func (parser *Parser) program() (AST, error) {
+	// program: compoundStatement DOT
+	node, err := parser.compoundStatement()
+	if err != nil {
+		return nil, err
+	}
+	err = parser.eatOnlyKind(dotKind)
+	return node, err
+}
+
+func (parser *Parser) compoundStatement() (AST, error) {
+	// compoundStatement: BEGIN statementList END
+	err := parser.eat(keywordKind, "BEGIN")
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := parser.statementList()
+	if err != nil {
+		return nil, err
+	}
+
+	err = parser.eat(keywordKind, "END")
+	if err != nil {
+		return nil, err
+	}
+
+	root := Compound{}
+	for _, node := range nodes {
+		root.Children = append(root.Children, node)
+	}
+	return root, nil
+}
+
+func (parser *Parser) statementList() ([]AST, error) {
+	// statementList: statement
+	//              | statement SEMI statementList
+	node, err := parser.statement()
+	if err != nil {
+		return nil, err
+	}
+
+	results := []AST{node}
+	for parser.currentToken().kind == semiKind {
+		err = parser.eatOnlyKind(semiKind)
+		node, err := parser.statement()
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, node)
+	}
+
+	// ?
+	// if parser.currentToken().kind == IDKind {
+	// 	return nil, errors.New()
+	// }
+
+	return results, nil
+}
+
+func (parser *Parser) statement() (AST, error) {
+	// statement: compoundStatement
+	//          | assignStatement
+	//          | empty
+	token := parser.currentToken()
+	switch {
+	case token.kind == keywordKind && token.value == "BEGIN":
+		return parser.compoundStatement()
+	case token.kind == IDKind:
+		return parser.assignStatement()
+	default:
+		return parser.empty()
+	}
+}
+
+func (parser *Parser) assignStatement() (AST, error) {
+	// assignStatement: variable ASSIGN expr
+	left, err := parser.variable()
+	token := parser.currentToken()
+	if err != nil {
+		return nil, err
+	}
+	err = parser.eatOnlyKind(assignKind)
+	if err != nil {
+		return nil, err
+	}
+	right, err := parser.expr()
+	if err != nil {
+		return nil, err
+	}
+	return Assign{Left: left, Op: token, Right: right}, nil
+}
+
+func (parser *Parser) variable() (AST, error) {
+	// variable: ID
+	node := NewVar(parser.currentToken())
+	err := parser.eatOnlyKind(IDKind)
+	return node, err
+}
+
+func (parser *Parser) empty() (AST, error) {
+	return NoOp{}, nil
+}
+
+func (parser *Parser) factor() (AST, error) {
+	// factor : PLUS factor
+	//        | MINUS factor
+	//        | INTEGER
+	//        | LPAREN expr RPAREN
+	//        | variable
+	token := parser.currentToken()
 
 	switch token.kind {
 	case numericKind:
-		err := itpr.eat(numericKind, "INTEGER")
+		err := parser.eat(numericKind, "INTEGER")
 		if err != nil {
 			return nil, err
 		}
 		return NewNum(token), nil
 	case operatorKind:
 		if token.value == "LPAREN" {
-			err := itpr.eat(operatorKind, "LPAREN")
+			err := parser.eat(operatorKind, "LPAREN")
 			if err != nil {
 				return nil, err
 			}
-			node, err := itpr.expr()
+			node, err := parser.expr()
 			if err != nil {
 				return nil, err
 			}
-			err = itpr.eat(operatorKind, "RPAREN")
+			err = parser.eat(operatorKind, "RPAREN")
 			if err != nil {
 				return nil, err
 			}
 			return node, nil
 		} else if token.value == "PLUS" || token.value == "MINUS" {
-			err := itpr.eat(operatorKind, token.value)
-			fact, err := itpr.factor()
+			err := parser.eat(operatorKind, token.value)
+			fact, err := parser.factor()
 			if err != nil {
 				return nil, err
 			}
 			node := UnaryOp{Op: token, expr: fact}
 			return node, nil
 		}
+	default:
+		return parser.variable()
 	}
 
 	return nil, errors.New("Error factor")
 }
 
-func (itpr *Interpreter) term() (AST, error) {
-	node, err := itpr.factor()
+func (parser *Parser) term() (AST, error) {
+	node, err := parser.factor()
 	if err != nil {
 		return nil, err
 	}
 
-	for itpr.currentToken().kind == operatorKind &&
-		contains([]string{"MUL", "DIV"}, itpr.currentToken().value) {
-		token := itpr.currentToken()
+	for parser.currentToken().kind == operatorKind &&
+		contains([]string{"MUL", "DIV"}, parser.currentToken().value) {
+		token := parser.currentToken()
 		switch token.value {
 		case "MUL":
-			err := itpr.eat(operatorKind, "MUL")
+			err := parser.eat(operatorKind, "MUL")
 			if err != nil {
 				return nil, err
 			}
 		case "DIV":
-			err := itpr.eat(operatorKind, "DIV")
+			err := parser.eat(operatorKind, "DIV")
 			if err != nil {
 				return nil, err
 			}
 		}
-		rightNode, err := itpr.factor()
+		rightNode, err := parser.factor()
 		if err != nil {
 			return nil, err
 		}
@@ -270,31 +415,31 @@ func (itpr *Interpreter) term() (AST, error) {
 	return node, nil
 }
 
-func (itpr *Interpreter) expr() (AST, error) {
+func (parser *Parser) expr() (AST, error) {
 	// expr: term ((MUL|DIV)term)*
 	// term: factor ((MUL|DIV)factor)*
 	// factor: (PLUS|MINUS) factor | INTEGER | LPAREN expr RPAREN
-	node, err := itpr.term()
+	node, err := parser.term()
 	if err != nil {
 		return nil, err
 	}
 
-	for itpr.currentToken().kind == operatorKind &&
-		contains([]string{"PLUS", "MINUS"}, itpr.currentToken().value) {
-		token := itpr.currentToken()
+	for parser.currentToken().kind == operatorKind &&
+		contains([]string{"PLUS", "MINUS"}, parser.currentToken().value) {
+		token := parser.currentToken()
 		switch token.value {
 		case "PLUS":
-			err := itpr.eat(operatorKind, "PLUS")
+			err := parser.eat(operatorKind, "PLUS")
 			if err != nil {
 				return nil, err
 			}
 		case "MINUS":
-			err := itpr.eat(operatorKind, "MINUS")
+			err := parser.eat(operatorKind, "MINUS")
 			if err != nil {
 				return nil, err
 			}
 		}
-		rightNode, err := itpr.term()
+		rightNode, err := parser.term()
 		if err != nil {
 			return nil, err
 		}
@@ -304,6 +449,11 @@ func (itpr *Interpreter) expr() (AST, error) {
 	return node, nil
 }
 
+func (parser *Parser) parse() (AST, error) {
+	return parser.program()
+}
+
+/////// INTERPRETER
 func visitBinOp(node AST) (int, error) {
 	nodeBinOp := node.(BinOp)
 
@@ -365,23 +515,22 @@ func visit(node AST) (int, error) {
 	}
 }
 
-///// main flow
+///// ALL TOGETHER
 func interprete(text string) (AST, error) {
 	// 1. lexing: decompose string into tokens
+	// also convert tokens into values based on their kinds
 	tokens, err := lex(text)
 	if err != nil {
 		return -1, err
 	}
 
-	// 2. parser: convert tokens into values based on their kinds
-	tokens, err = parse(tokens)
-	if err != nil {
-		return -1, err
-	}
+	// 2. parser: build AST representation
+	parser := NewParser(tokens)
+	return parser.parse()
 
 	// 3. interpreter: generate result
-	interpreter := Interpreter{tokens, 0}
-	return interpreter.expr()
+	// interpreter := Parser{tokens, 0}
+	// return interpreter.expr()
 }
 
 // func main() {
@@ -401,9 +550,19 @@ func interprete(text string) (AST, error) {
 // }
 
 func main() {
-	tokens, err := lex("BEGIN a := 2; END.")
+	// tokens, err := interprete("BEGIN a := 2; END.")
+	tokens, err := interprete(`BEGIN
+    BEGIN
+        number := 2;
+        a := number;
+        b := 10 * a + 10 * number / 4;
+        c := a - - b
+    END;
+    x := 11;
+END.`)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(tokens)
+	fmt.Printf("%#v\n", tokens)
+	// fmt.Println(tokens)
 }
