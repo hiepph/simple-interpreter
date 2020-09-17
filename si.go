@@ -85,12 +85,12 @@ type Assign struct {
 
 type Var struct {
 	Token Token
-	Value int // ?
+	Value string
 }
 
 func NewVar(token Token) Var {
 	v := Var{Token: token}
-	v.Value = token.intValue
+	v.Value = token.value
 	return v
 }
 
@@ -105,7 +105,7 @@ func isChar(c byte) bool {
 }
 
 func isSpace(c byte) bool {
-	return c-' ' == 0 || c-'\n' == 0
+	return c == ' ' || c == '\n' || c == '\t'
 }
 
 func isOperator(c byte) bool {
@@ -454,14 +454,19 @@ func (parser *Parser) parse() (AST, error) {
 }
 
 /////// INTERPRETER
-func visitBinOp(node AST) (int, error) {
+type Interpreter struct {
+	node        AST
+	globalScope map[string]int
+}
+
+func (itpr *Interpreter) visitBinOp(node AST) (int, error) {
 	nodeBinOp := node.(BinOp)
 
-	left, err := visit(nodeBinOp.Left)
+	left, err := itpr.visit(nodeBinOp.Left)
 	if err != nil {
 		return -1, err
 	}
-	right, err := visit(nodeBinOp.Right)
+	right, err := itpr.visit(nodeBinOp.Right)
 	if err != nil {
 		return -1, err
 	}
@@ -480,20 +485,20 @@ func visitBinOp(node AST) (int, error) {
 	}
 }
 
-func visitNum(node AST) (int, error) {
+func (itpr *Interpreter) visitNum(node AST) (int, error) {
 	return node.(Num).Value, nil
 }
 
-func visitUnaryOp(node AST) (int, error) {
+func (itpr *Interpreter) visitUnaryOp(node AST) (int, error) {
 	n, ok := node.(UnaryOp)
 	if !ok {
 		return -1, errors.New("Error Unary Op")
 	}
 	switch n.Op.value {
 	case "PLUS":
-		return visit(n.expr)
+		return itpr.visit(n.expr)
 	case "MINUS":
-		v, err := visit(n.expr)
+		v, err := itpr.visit(n.expr)
 		if err != nil {
 			return -1, err
 		}
@@ -502,21 +507,64 @@ func visitUnaryOp(node AST) (int, error) {
 	return -1, errors.New("Error visiting Unary Op")
 }
 
-func visit(node AST) (int, error) {
+func (itpr *Interpreter) visitCompound(node AST) (int, error) {
+	for _, child := range node.(Compound).Children {
+		_, err := itpr.visit(child)
+		if err != nil {
+			return -1, err
+		}
+	}
+
+	return -1, nil
+}
+
+func (itpr *Interpreter) visitNoOp(node AST) (int, error) {
+	return -1, nil
+}
+
+func (itpr *Interpreter) visitAssign(node AST) (int, error) {
+	varName := node.(Assign).Left.(Var).Value
+	v, err := itpr.visit(node.(Assign).Right)
+	itpr.globalScope[varName] = v
+	return -1, err
+}
+
+func (itpr *Interpreter) visitVar(node AST) (int, error) {
+	varName := node.(Var).Value
+	val, ok := itpr.globalScope[varName]
+	if !ok {
+		return -1, errors.New(fmt.Sprintf("No %v registered\n", varName))
+	}
+	return val, nil
+}
+
+func (itpr *Interpreter) visit(node AST) (int, error) {
 	switch node.(type) {
 	case BinOp:
-		return visitBinOp(node)
+		return itpr.visitBinOp(node)
 	case Num:
-		return visitNum(node)
+		return itpr.visitNum(node)
 	case UnaryOp:
-		return visitUnaryOp(node)
+		return itpr.visitUnaryOp(node)
+	case NoOp:
+		return itpr.visitNoOp(node)
+	case Compound:
+		return itpr.visitCompound(node)
+	case Var:
+		return itpr.visitVar(node)
+	case Assign:
+		return itpr.visitAssign(node)
 	default:
 		return -1, errors.New("Unknown node type")
 	}
 }
 
+func (itpr Interpreter) interprete() (int, error) {
+	return itpr.visit(itpr.node)
+}
+
 ///// ALL TOGETHER
-func interprete(text string) (AST, error) {
+func do(text string) (interface{}, error) {
 	// 1. lexing: decompose string into tokens
 	// also convert tokens into values based on their kinds
 	tokens, err := lex(text)
@@ -526,11 +574,15 @@ func interprete(text string) (AST, error) {
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
-	return parser.parse()
+	node, err := parser.parse()
+	if err != nil {
+		return -1, err
+	}
 
 	// 3. interpreter: generate result
-	// interpreter := Parser{tokens, 0}
-	// return interpreter.expr()
+	itpr := Interpreter{node: node, globalScope: make(map[string]int)}
+	itpr.interprete()
+	return itpr.globalScope, nil
 }
 
 // func main() {
@@ -550,19 +602,18 @@ func interprete(text string) (AST, error) {
 // }
 
 func main() {
-	// tokens, err := interprete("BEGIN a := 2; END.")
-	tokens, err := interprete(`BEGIN
-    BEGIN
-        number := 2;
-        a := number;
-        b := 10 * a + 10 * number / 4;
-        c := a - - b
-    END;
-    x := 11;
-END.`)
+	// v, err := do("BEGIN a := 2; END.")
+	v, err := do(`BEGIN
+	    BEGIN
+	        number := 2;
+	        a := number;
+	        b := 10 * a + 10 * number / 4;
+	        c := a - - b
+	    END;
+	    x := 11;
+	END.`)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%#v\n", tokens)
-	// fmt.Println(tokens)
+	fmt.Println(v)
 }
