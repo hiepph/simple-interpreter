@@ -40,12 +40,12 @@ var operatorDictionary = map[string]Operator{
 	")": RPAREN,
 }
 
-var keywordList = []string{"BEGIN", "END"}
+var keywordList = []string{"BEGIN", "END", "PROGRAM", "VAR", "DIV", "INTEGER", "REAL"}
 
 type Token struct {
-	kind     tokenKind
-	value    string
-	intValue int
+	Kind         tokenKind
+	Value        string
+	NumericValue interface{}
 }
 
 type AST interface {
@@ -126,6 +126,7 @@ func contains(arr []string, s string) bool {
 /////// LEXER
 func lex(text string) ([]Token, error) {
 	tokens := make([]Token, 0)
+	var token Token
 	i := 0
 	for i < len(text) {
 		c := text[i]
@@ -133,18 +134,40 @@ func lex(text string) ([]Token, error) {
 		switch {
 		case isDigit(c):
 			j := i
-			// multiple digits
-			for ; j < len(text) && isDigit(text[j]); j++ {
+			// multiple digits or float
+			numericType := "INTEGER_CONST"
+			for ; j < len(text) && (isDigit(text[j]) || text[j] == '.'); j++ {
+				if text[j] == '.' {
+					numericType = "REAL_CONST"
+				}
 			}
 
-			tokens = append(tokens,
-				Token{numericKind, text[i:j], -1})
+			s := text[i:j]
+			switch numericType {
+			case "INTEGER_CONST":
+				v, err := strconv.Atoi(s)
+				if err != nil {
+					return tokens, err
+				}
+				token = Token{numericKind, s, v}
+			case "REAL_CONST":
+				v, err := strconv.ParseFloat(s, 32)
+				if err != nil {
+					return tokens, err
+				}
+				token = Token{numericKind, s, v}
+			}
 			i = j
 			continue
 		case isSpace(c):
+		case c == '{': // comment
+			j := i
+			for ; j < len(text) && text[j] != '}'; j++ {
+			}
+			i = j
 		case isOperator(c):
-			tokens = append(tokens,
-				Token{operatorKind, string(c), -1})
+			op, _ := operatorDictionary[string(c)]
+			token = Token{operatorKind, string(op), -1}
 		case isChar(c):
 			// multiple characters
 			j := i
@@ -178,21 +201,6 @@ func lex(text string) ([]Token, error) {
 
 	tokens = append(tokens,
 		Token{EOFKind, "", -1})
-
-	for i, token := range tokens {
-		if token.kind == numericKind {
-			value, err := strconv.Atoi(token.value)
-			if err != nil {
-				return tokens, errors.New("Error parsing tokens")
-			}
-
-			tokens[i].intValue = value
-		} else if token.kind == operatorKind {
-			op, _ := operatorDictionary[token.value]
-			tokens[i].value = string(op)
-		}
-	}
-
 	return tokens, nil
 }
 
