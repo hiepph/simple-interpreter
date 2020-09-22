@@ -64,12 +64,12 @@ type UnaryOp struct {
 
 type Num struct {
 	Token Token
-	Value int
+	Value interface{}
 }
 
 func NewNum(token Token) Num {
 	num := Num{Token: token}
-	num.Value = token.intValue
+	num.Value = token.NumericValue
 	return num
 }
 
@@ -90,7 +90,7 @@ type Var struct {
 
 func NewVar(token Token) Var {
 	v := Var{Token: token}
-	v.Value = token.value
+	v.Value = token.Value
 	return v
 }
 
@@ -157,14 +157,15 @@ func lex(text string) ([]Token, error) {
 				}
 				token = Token{numericKind, s, v}
 			}
-			i = j
-			continue
+			i = j - 1
 		case isSpace(c):
+			i++
+			continue
 		case c == '{': // comment
 			j := i
 			for ; j < len(text) && text[j] != '}'; j++ {
 			}
-			i = j
+			i = j - 1
 		case isOperator(c):
 			op, _ := operatorDictionary[string(c)]
 			token = Token{operatorKind, string(op), -1}
@@ -175,27 +176,23 @@ func lex(text string) ([]Token, error) {
 			}
 			s := text[i:j]
 			if contains(keywordList, s) {
-				tokens = append(tokens,
-					Token{keywordKind, s, -1})
+				token = Token{keywordKind, s, -1}
 			} else {
-				tokens = append(tokens,
-					Token{IDKind, s, -1})
+				token = Token{IDKind, s, -1}
 			}
-			i = j
-			continue
+			i = j - 1
 		case c == ':' && text[i+1] == '=':
-			tokens = append(tokens,
-				Token{assignKind, ":=", -1})
+			token = Token{assignKind, ":=", -1}
 			i++
 		case c == ';':
-			tokens = append(tokens,
-				Token{semiKind, ";", -1})
+			token = Token{semiKind, ";", -1}
 		case c == '.':
-			tokens = append(tokens,
-				Token{dotKind, ".", -1})
+			token = Token{dotKind, ".", -1}
 		default:
 			return tokens, errors.New("Error lexing input")
 		}
+
+		tokens = append(tokens, token)
 		i++
 	}
 
@@ -223,24 +220,24 @@ func (parser Parser) currentToken() Token {
 
 func (parser *Parser) eatOnlyKind(kind tokenKind) error {
 	token := parser.currentToken()
-	if token.kind == kind {
+	if token.Kind == kind {
 		parser.cur++
 		return nil
 	}
 	return errors.New(fmt.Sprintf("Error eating tokens %d."+
-		"want: %v, actual: %v", parser.cur, kind, token.kind))
+		"want: %v, actual: %v", parser.cur, kind, token.Kind))
 }
 
 func (parser *Parser) eat(kind tokenKind, value string) error {
 	token := parser.currentToken()
-	if (kind == numericKind && token.kind == kind) ||
-		(token.kind == kind && token.value == value) {
+	if (kind == numericKind && token.Kind == kind) ||
+		(token.Kind == kind && token.Value == value) {
 		parser.cur++
 		return nil
 	}
 
 	return errors.New(fmt.Sprintf("Error eating tokens %d."+
-		"want: %v, actual: %v", parser.cur, value, token.value))
+		"want: %v, actual: %v", parser.cur, value, token.Value))
 }
 
 func (parser *Parser) program() (AST, error) {
@@ -285,7 +282,7 @@ func (parser *Parser) statementList() ([]AST, error) {
 	}
 
 	results := []AST{node}
-	for parser.currentToken().kind == semiKind {
+	for parser.currentToken().Kind == semiKind {
 		err = parser.eatOnlyKind(semiKind)
 		node, err := parser.statement()
 		if err != nil {
@@ -295,7 +292,7 @@ func (parser *Parser) statementList() ([]AST, error) {
 	}
 
 	// ?
-	// if parser.currentToken().kind == IDKind {
+	// if parser.currentToken().Kind == IDKind {
 	// 	return nil, errors.New()
 	// }
 
@@ -308,9 +305,9 @@ func (parser *Parser) statement() (AST, error) {
 	//          | empty
 	token := parser.currentToken()
 	switch {
-	case token.kind == keywordKind && token.value == "BEGIN":
+	case token.Kind == keywordKind && token.Value == "BEGIN":
 		return parser.compoundStatement()
-	case token.kind == IDKind:
+	case token.Kind == IDKind:
 		return parser.assignStatement()
 	default:
 		return parser.empty()
@@ -354,7 +351,7 @@ func (parser *Parser) factor() (AST, error) {
 	//        | variable
 	token := parser.currentToken()
 
-	switch token.kind {
+	switch token.Kind {
 	case numericKind:
 		err := parser.eat(numericKind, "INTEGER")
 		if err != nil {
@@ -362,7 +359,7 @@ func (parser *Parser) factor() (AST, error) {
 		}
 		return NewNum(token), nil
 	case operatorKind:
-		if token.value == "LPAREN" {
+		if token.Value == "LPAREN" {
 			err := parser.eat(operatorKind, "LPAREN")
 			if err != nil {
 				return nil, err
@@ -376,8 +373,8 @@ func (parser *Parser) factor() (AST, error) {
 				return nil, err
 			}
 			return node, nil
-		} else if token.value == "PLUS" || token.value == "MINUS" {
-			err := parser.eat(operatorKind, token.value)
+		} else if token.Value == "PLUS" || token.Value == "MINUS" {
+			err := parser.eat(operatorKind, token.Value)
 			fact, err := parser.factor()
 			if err != nil {
 				return nil, err
@@ -398,10 +395,10 @@ func (parser *Parser) term() (AST, error) {
 		return nil, err
 	}
 
-	for parser.currentToken().kind == operatorKind &&
-		contains([]string{"MUL", "DIV"}, parser.currentToken().value) {
+	for parser.currentToken().Kind == operatorKind &&
+		contains([]string{"MUL", "DIV"}, parser.currentToken().Value) {
 		token := parser.currentToken()
-		switch token.value {
+		switch token.Value {
 		case "MUL":
 			err := parser.eat(operatorKind, "MUL")
 			if err != nil {
@@ -432,10 +429,10 @@ func (parser *Parser) expr() (AST, error) {
 		return nil, err
 	}
 
-	for parser.currentToken().kind == operatorKind &&
-		contains([]string{"PLUS", "MINUS"}, parser.currentToken().value) {
+	for parser.currentToken().Kind == operatorKind &&
+		contains([]string{"PLUS", "MINUS"}, parser.currentToken().Value) {
 		token := parser.currentToken()
-		switch token.value {
+		switch token.Value {
 		case "PLUS":
 			err := parser.eat(operatorKind, "PLUS")
 			if err != nil {
@@ -479,7 +476,7 @@ func (itpr *Interpreter) visitBinOp(node AST) (int, error) {
 		return -1, err
 	}
 
-	switch nodeBinOp.Op.value {
+	switch nodeBinOp.Op.Value {
 	case "PLUS":
 		return left + right, nil
 	case "MINUS":
@@ -494,7 +491,7 @@ func (itpr *Interpreter) visitBinOp(node AST) (int, error) {
 }
 
 func (itpr *Interpreter) visitNum(node AST) (int, error) {
-	return node.(Num).Value, nil
+	return node.(Num).Value.(int), nil
 }
 
 func (itpr *Interpreter) visitUnaryOp(node AST) (int, error) {
@@ -502,7 +499,7 @@ func (itpr *Interpreter) visitUnaryOp(node AST) (int, error) {
 	if !ok {
 		return -1, errors.New("Error Unary Op")
 	}
-	switch n.Op.value {
+	switch n.Op.Value {
 	case "PLUS":
 		return itpr.visit(n.expr)
 	case "MINUS":
@@ -579,18 +576,19 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return -1, err
 	}
+	return tokens, nil
 
 	// 2. parser: build AST representation
-	parser := NewParser(tokens)
-	node, err := parser.parse()
-	if err != nil {
-		return -1, err
-	}
+	// parser := NewParser(tokens)
+	// node, err := parser.parse()
+	// if err != nil {
+	// 	return -1, err
+	// }
 
-	// 3. interpreter: generate result
-	itpr := Interpreter{node: node, globalScope: make(map[string]int)}
-	itpr.interprete()
-	return itpr.globalScope, nil
+	// // 3. interpreter: generate result
+	// itpr := Interpreter{node: node, globalScope: make(map[string]int)}
+	// itpr.interprete()
+	// return itpr.globalScope, nil
 }
 
 // func main() {
