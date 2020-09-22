@@ -23,19 +23,20 @@ const (
 type Operator string
 
 const (
-	PLUS   Operator = "PLUS"
-	MINUS  Operator = "MINUS"
-	MUL    Operator = "MUL"
-	DIV    Operator = "DIV"
-	LPAREN Operator = "LPAREN"
-	RPAREN Operator = "RPAREN"
+	PLUS      Operator = "PLUS"
+	MINUS     Operator = "MINUS"
+	MUL       Operator = "MUL"
+	DIV       Operator = "DIV"
+	FLOAT_DIV Operator = "FLOAT_DIV"
+	LPAREN    Operator = "LPAREN"
+	RPAREN    Operator = "RPAREN"
 )
 
 var operatorDictionary = map[string]Operator{
 	"+": PLUS,
 	"-": MINUS,
 	"*": MUL,
-	"/": DIV,
+	"/": FLOAT_DIV,
 	"(": LPAREN,
 	")": RPAREN,
 }
@@ -176,6 +177,7 @@ func lex(text string) ([]Token, error) {
 			}
 			s := text[i:j]
 			if contains(keywordList, s) {
+				// TODO: check DIV
 				token = Token{keywordKind, s, -1}
 			} else {
 				token = Token{IDKind, s, -1}
