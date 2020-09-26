@@ -720,6 +720,30 @@ func (itpr *Interpreter) visitVar(node AST) (int, error) {
 	return val, nil
 }
 
+func (itpr *Interpreter) visitProgram(node AST) error {
+	_, err := itpr.visit(node.(Program).Block)
+	return err
+}
+
+func (itpr *Interpreter) visitBlock(node AST) error {
+	for _, dec := range node.(Block).Declarations {
+		_, err := itpr.visit(dec)
+		if err != nil {
+			return err
+		}
+	}
+	_, err := itpr.visit(node.(Block).CompoundStatement)
+	return err
+}
+
+func (itpr *Interpreter) visitVarDecl(node AST) error {
+	return nil
+}
+
+func (itpr *Interpreter) visitType(node AST) error {
+	return nil
+}
+
 func (itpr *Interpreter) visit(node AST) (int, error) {
 	switch node.(type) {
 	case BinOp:
