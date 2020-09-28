@@ -80,8 +80,8 @@ type Block struct {
 }
 
 type VarDecl struct {
-	VarNode  AST
-	TypeNode AST
+	VarNode  Var
+	TypeNode Type
 }
 
 type Type struct {
@@ -172,6 +172,87 @@ func (t *SymbolTable) define(symbol Symbol) {
 func (t SymbolTable) lookup(name string) (Symbol, bool) {
 	s, ok := t.Symbols[name]
 	return s, ok
+}
+
+type SymbolTableBuilder struct {
+	Table SymbolTable
+}
+
+func (tb *SymbolTableBuilder) visit(node AST) error {
+	switch node.(type) {
+	case Program:
+		return tb.visitProgram(node)
+	case BinOp:
+		return tb.visitBinOp(node)
+	case Num:
+		return tb.visitNum(node)
+	case UnaryOp:
+		return tb.visitUnaryOp(node)
+	case Compound:
+		return tb.visitCompound(node)
+	case NoOp:
+		return tb.visitNoOp(node)
+	case VarDecl:
+		return tb.visitVarDecl(node)
+	default:
+		return errors.New("Unknown node type")
+	}
+}
+
+func (tb *SymbolTableBuilder) visitBlock(node AST) error {
+	for _, dec := range node.(Block).Declarations {
+		err := tb.visit(dec)
+		if err != nil {
+			return err
+		}
+	}
+	return tb.visit(node.(Block).CompoundStatement)
+}
+
+func (tb *SymbolTableBuilder) visitProgram(node AST) error {
+	return tb.visit(node.(Program).Block)
+}
+func (tb *SymbolTableBuilder) visitBinOp(node AST) error {
+	nodeBinOp := node.(BinOp)
+
+	err := tb.visit(nodeBinOp.Left)
+	if err != nil {
+		return err
+	}
+	err = tb.visit(nodeBinOp.Right)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func (tb *SymbolTableBuilder) visitNum(node AST) error {
+	return nil
+}
+func (tb *SymbolTableBuilder) visitUnaryOp(node AST) error {
+	return tb.visit(node.(UnaryOp).expr)
+}
+func (tb *SymbolTableBuilder) visitCompound(node AST) error {
+	for _, child := range node.(Compound).Children {
+		err := tb.visit(child)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+func (tb *SymbolTableBuilder) visitNoOp(node AST) error {
+	return nil
+}
+func (tb *SymbolTableBuilder) visitVarDecl(node AST) error {
+	typeName := node.(VarDecl).TypeNode.Token.Value
+	typeSymbol, ok := tb.Table.lookup(typeName)
+	if !ok {
+		return errors.New(fmt.Sprintf("Can't not find key %s\n", typeName))
+	}
+	varName := node.(VarDecl).Token.Value
+	return nil
 }
 
 func isDigit(c byte) bool {
@@ -648,7 +729,7 @@ func (parser *Parser) variableDeclarations() ([]VarDecl, error) {
 
 	var result []VarDecl
 	for _, varNode := range varNodes {
-		result = append(result, VarDecl{varNode, typeNode})
+		result = append(result, VarDecl{varNode.(Var), typeNode})
 	}
 
 	return result, nil
@@ -885,7 +966,7 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Println(tokens)
+	fmt.Println(tokens)
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
