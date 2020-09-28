@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -132,6 +133,46 @@ func NewVar(token Token) Var {
 }
 
 type NoOp struct{}
+
+type Symbol struct {
+	Name string
+	Type interface{}
+}
+
+var (
+	intType  = Symbol{"INTEGER", "BUILT-IN"}
+	realType = Symbol{"INTEGER", "BUILT-IN"}
+)
+
+type SymbolTable struct {
+	Symbols map[string]Symbol
+}
+
+func NewSymbolTable() SymbolTable {
+	t := SymbolTable{}
+	t.Symbols = make(map[string]Symbol)
+
+	t.define(intType)
+	t.define(realType)
+	return t
+}
+
+func (t SymbolTable) String() string {
+	b, err := json.MarshalIndent(t.Symbols, "", "  ")
+	if err == nil {
+		return string(b)
+	}
+	return ""
+}
+
+func (t *SymbolTable) define(symbol Symbol) {
+	t.Symbols[symbol.Name] = symbol
+}
+
+func (t SymbolTable) lookup(name string) (Symbol, bool) {
+	s, ok := t.Symbols[name]
+	return s, ok
+}
 
 func isDigit(c byte) bool {
 	return '0' <= c && c <= '9'
@@ -852,7 +893,7 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("%+v\n", node)
+	fmt.Printf("%+v\n", node)
 
 	// // 3. interpreter: generate result
 	itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}

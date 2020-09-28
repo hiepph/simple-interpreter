@@ -1,36 +1,26 @@
 package main
 
 import (
+	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestExpr(t *testing.T) {
-	tests := []struct {
-		text string
-		want int
-	}{
-		{"3+5", 8},
-		{"13+5", 18},
-		{"13 + 5", 18},
-		{"  13 +    5", 18},
-		{"12 - 24", -12},
-		{"12 - 24 + 6-37", -43},
-		{"7 * 2 + 8 - 2 / 2 + 3 * 10 / 2", 36},
-		{"7 * 2 + 8 - 2 / 2 + 3 * 10 / 2", 36},
-		{"2 * (7 + 3)", 20},
-		{"7 + 3 * (10 / (12 / (3 + 1) - 1))", 22},
-		{"7 + (((3+2)))", 12},
-		{"5---2", 3},
-	}
-	for _, test := range tests {
-		node, err := interprete(test.text)
-		assert.NoError(t, err, test.text)
+func TestSymbol(t *testing.T) {
+	table := NewSymbolTable()
 
-		v, err := visit(node)
-		if assert.NoError(t, err, test.text) {
-			assert.Equal(t, test.want, v, test.text)
-		}
-	}
+	varXSymbol := Symbol{"x", intType}
+	varYSymbol := Symbol{"y", realType}
+	table.define(varXSymbol)
+	table.define(varYSymbol)
+	log.Println(table)
+
+	resX, ok := table.lookup("x")
+	assert.True(t, ok)
+	assert.Equal(t, resX, varXSymbol)
+	assert.NotEqual(t, resX, varYSymbol)
+
+	resY, ok := table.lookup("y")
+	assert.Equal(t, resY, varYSymbol)
 }
