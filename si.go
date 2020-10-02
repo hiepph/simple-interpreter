@@ -1001,6 +1001,7 @@ func do(text string) (interface{}, error) {
 	}
 	fmt.Println("------------")
 	fmt.Println(symtabBuilder.Table)
+	// TODO (Oct 2nd): -> visit_Assign
 
 	return nil, nil
 }
