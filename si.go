@@ -141,7 +141,7 @@ type Symbol struct {
 
 var (
 	intType  = Symbol{"INTEGER", "BUILT-IN"}
-	realType = Symbol{"INTEGER", "BUILT-IN"}
+	realType = Symbol{"REAL", "BUILT-IN"}
 )
 
 type SymbolTable struct {
@@ -182,6 +182,8 @@ func (tb *SymbolTableBuilder) visit(node AST) error {
 	switch node.(type) {
 	case Program:
 		return tb.visitProgram(node)
+	case Block:
+		return tb.visitBlock(node)
 	case BinOp:
 		return tb.visitBinOp(node)
 	case Num:
@@ -195,7 +197,7 @@ func (tb *SymbolTableBuilder) visit(node AST) error {
 	case VarDecl:
 		return tb.visitVarDecl(node)
 	default:
-		return errors.New("Unknown node type")
+		return errors.New(fmt.Sprintf("Unknown node type %T", node))
 	}
 }
 
@@ -212,6 +214,7 @@ func (tb *SymbolTableBuilder) visitBlock(node AST) error {
 func (tb *SymbolTableBuilder) visitProgram(node AST) error {
 	return tb.visit(node.(Program).Block)
 }
+
 func (tb *SymbolTableBuilder) visitBinOp(node AST) error {
 	nodeBinOp := node.(BinOp)
 
@@ -226,12 +229,15 @@ func (tb *SymbolTableBuilder) visitBinOp(node AST) error {
 
 	return nil
 }
+
 func (tb *SymbolTableBuilder) visitNum(node AST) error {
 	return nil
 }
+
 func (tb *SymbolTableBuilder) visitUnaryOp(node AST) error {
 	return tb.visit(node.(UnaryOp).expr)
 }
+
 func (tb *SymbolTableBuilder) visitCompound(node AST) error {
 	for _, child := range node.(Compound).Children {
 		err := tb.visit(child)
@@ -242,16 +248,20 @@ func (tb *SymbolTableBuilder) visitCompound(node AST) error {
 
 	return nil
 }
+
 func (tb *SymbolTableBuilder) visitNoOp(node AST) error {
 	return nil
 }
+
 func (tb *SymbolTableBuilder) visitVarDecl(node AST) error {
 	typeName := node.(VarDecl).TypeNode.Token.Value
 	typeSymbol, ok := tb.Table.lookup(typeName)
 	if !ok {
 		return errors.New(fmt.Sprintf("Can't not find key %s\n", typeName))
 	}
-	varName := node.(VarDecl).Token.Value
+	varName := node.(VarDecl).VarNode.Token.Value
+	varSymbol := Symbol{varName, typeSymbol}
+	tb.Table.define(varSymbol)
 	return nil
 }
 
@@ -966,7 +976,7 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(tokens)
+	// fmt.Println(tokens)
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
@@ -976,53 +986,59 @@ func do(text string) (interface{}, error) {
 	}
 	fmt.Printf("%+v\n", node)
 
-	// // 3. interpreter: generate result
+	// 3. interpreter: generate result
 	itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
 	_, err = itpr.interprete()
 	if err != nil {
 		return nil, err
 	}
-	return itpr.globalScope, nil
+	// fmt.Println(itpr.globalScope)
+
+	symtabBuilder := SymbolTableBuilder{Table: NewSymbolTable()}
+	err = symtabBuilder.visit(node)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("------------")
+	fmt.Println(symtabBuilder.Table)
+
+	return nil, nil
 }
 
 func main() {
-	// v, err := do("BEGIN a := 2; END.")
-	// 	v, err := do(`PROGRAM Part10AST;
+	_, err := do(`PROGRAM Part11;
+	VAR
+	   x : INTEGER;
+	   y : REAL;
+
+	BEGIN
+
+	END.`)
+	// 	_, err := do(`
+	// PROGRAM Part10;
 	// VAR
-	//    a, b : INTEGER;
-	//    y    : REAL;
+	//    number     : INTEGER;
+	//    a, b, c, x : INTEGER;
+	//    y          : REAL;
 
-	// BEGIN {Part10AST}
-	//    a := 2;
-	//    b := 10 * a + 10 * a DIV 4;
+	// BEGIN {Part10}
+	//    BEGIN
+	//       number := 2;
+	//       a := number;
+	//       b := 10 * a + 10 * number DIV 4;
+	//       c := a - - b
+	//    END;
+	//    x := 11;
 	//    y := 20 / 7 + 3.14;
-	// END. {Part10AST}`)
-	v, err := do(`
-PROGRAM Part10;
-VAR
-   number     : INTEGER;
-   a, b, c, x : INTEGER;
-   y          : REAL;
-
-BEGIN {Part10}
-   BEGIN
-      number := 2;
-      a := number;
-      b := 10 * a + 10 * number DIV 4;
-      c := a - - b
-   END;
-   x := 11;
-   y := 20 / 7 + 3.14;
-   { writeln('a = ', a); }
-   { writeln('b = ', b); }
-   { writeln('c = ', c); }
-   { writeln('number = ', number); }
-   { writeln('x = ', x); }
-   { writeln('y = ', y); }
-END.  {Part10}
-`)
+	//    { writeln('a = ', a); }
+	//    { writeln('b = ', b); }
+	//    { writeln('c = ', c); }
+	//    { writeln('number = ', number); }
+	//    { writeln('x = ', x); }
+	//    { writeln('y = ', y); }
+	// END.  {Part10}
+	// `)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%+v\n", v)
 }
