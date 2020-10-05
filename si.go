@@ -196,6 +196,10 @@ func (tb *SymbolTableBuilder) visit(node AST) error {
 		return tb.visitNoOp(node)
 	case VarDecl:
 		return tb.visitVarDecl(node)
+	case Assign:
+		return tb.visitAssign(node)
+	case Var:
+		return tb.visitVar(node)
 	default:
 		return errors.New(fmt.Sprintf("Unknown node type %T", node))
 	}
@@ -257,11 +261,30 @@ func (tb *SymbolTableBuilder) visitVarDecl(node AST) error {
 	typeName := node.(VarDecl).TypeNode.Token.Value
 	typeSymbol, ok := tb.Table.lookup(typeName)
 	if !ok {
-		return errors.New(fmt.Sprintf("Can't not find key %s\n", typeName))
+		return errors.New(fmt.Sprintf("(VarDecl) Can't not find key %s\n", typeName))
 	}
 	varName := node.(VarDecl).VarNode.Token.Value
 	varSymbol := Symbol{varName, typeSymbol}
 	tb.Table.define(varSymbol)
+	return nil
+}
+
+func (tb *SymbolTableBuilder) visitAssign(node AST) error {
+	varName := node.(Assign).Left.(Var).Value
+	_, ok := tb.Table.lookup(varName)
+	if !ok {
+		return errors.New(fmt.Sprintf("(Assign) Can't not find key %s\n", varName))
+	}
+	return tb.visit(node.(Assign).Right)
+}
+
+func (tb *SymbolTableBuilder) visitVar(node AST) error {
+	varName := node.(Var).Value
+	_, ok := tb.Table.lookup(varName)
+	if !ok {
+		return errors.New(fmt.Sprintf("(Var) Can't not find key %s\n", varName))
+	}
+
 	return nil
 }
 
@@ -992,29 +1015,51 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Println(itpr.globalScope)
+	fmt.Println("-------- globalScope -------")
+	fmt.Println(itpr.globalScope)
 
 	symtabBuilder := SymbolTableBuilder{Table: NewSymbolTable()}
 	err = symtabBuilder.visit(node)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("------------")
+	fmt.Println("------ SymbolTable --------")
 	fmt.Println(symtabBuilder.Table)
-	// TODO (Oct 2nd): -> visit_Assign
 
 	return nil, nil
 }
 
 func main() {
+	// _, err := do(`PROGRAM Part11;
+	// VAR
+	//    x : INTEGER;
+	//    y : REAL;
+
+	// BEGIN
+
+	// END.`)
+
+	// 	_, err := do(`PROGRAM Part11;
+	// VAR
+	//    x : INTEGER;
+	// BEGIN
+	//    x := 2;
+	// END.
+	// `)
+
 	_, err := do(`PROGRAM Part11;
-	VAR
-	   x : INTEGER;
-	   y : REAL;
+VAR
+   number : INTEGER;
+   a, b   : INTEGER;
+   y      : REAL;
 
-	BEGIN
+BEGIN {Part11}
+   number := 2;
+   a := number ;
+   b := 10 * a + 10 * number DIV 4;
+   y := 20 / 7 + 3.14
+END.  {Part11}`)
 
-	END.`)
 	// 	_, err := do(`
 	// PROGRAM Part10;
 	// VAR
