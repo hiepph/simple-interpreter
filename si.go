@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 	"reflect"
 	"strconv"
 )
@@ -1030,60 +1032,14 @@ func do(text string) (interface{}, error) {
 }
 
 func main() {
-	// _, err := do(`PROGRAM Part11;
-	// VAR
-	//    x : INTEGER;
-	//    y : REAL;
+	content, err := ioutil.ReadFile(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// BEGIN
+	fmt.Println(string(content))
+	_, err = do(string(content))
 
-	// END.`)
-
-	// 	_, err := do(`PROGRAM Part11;
-	// VAR
-	//    x : INTEGER;
-	// BEGIN
-	//    x := 2;
-	// END.
-	// `)
-
-	_, err := do(`PROGRAM Part11;
-VAR
-   number : INTEGER;
-   a, b   : INTEGER;
-   y      : REAL;
-
-BEGIN {Part11}
-   number := 2;
-   a := number ;
-   b := 10 * a + 10 * number DIV 4;
-   y := 20 / 7 + 3.14
-END.  {Part11}`)
-
-	// 	_, err := do(`
-	// PROGRAM Part10;
-	// VAR
-	//    number     : INTEGER;
-	//    a, b, c, x : INTEGER;
-	//    y          : REAL;
-
-	// BEGIN {Part10}
-	//    BEGIN
-	//       number := 2;
-	//       a := number;
-	//       b := 10 * a + 10 * number DIV 4;
-	//       c := a - - b
-	//    END;
-	//    x := 11;
-	//    y := 20 / 7 + 3.14;
-	//    { writeln('a = ', a); }
-	//    { writeln('b = ', b); }
-	//    { writeln('c = ', c); }
-	//    { writeln('number = ', number); }
-	//    { writeln('x = ', x); }
-	//    { writeln('y = ', y); }
-	// END.  {Part10}
-	// `)
 	if err != nil {
 		log.Fatal(err)
 	}
