@@ -60,7 +60,8 @@ var operatorDictionary = map[string]Operator{
 	")": RPAREN,
 }
 
-var keywordList = []string{"BEGIN", "END", "PROGRAM", "VAR", "DIV", "INTEGER", "REAL"}
+var keywordList = []string{"BEGIN", "END", "PROCEDURE", "PROGRAM",
+	"VAR", "DIV", "INTEGER", "REAL"}
 
 type Token struct {
 	Kind         tokenKind
@@ -77,13 +78,21 @@ type Program struct {
 }
 
 type Block struct {
-	Declarations      []VarDecl
+	Declarations      []Decl
 	CompoundStatement AST
+}
+
+type Decl interface {
 }
 
 type VarDecl struct {
 	VarNode  Var
 	TypeNode Type
+}
+
+type ProcedureDecl struct {
+	Name  string
+	Block Block
 }
 
 type Type struct {
@@ -198,12 +207,15 @@ func (tb *SymbolTableBuilder) visit(node AST) error {
 		return tb.visitNoOp(node)
 	case VarDecl:
 		return tb.visitVarDecl(node)
+	case ProcedureDecl:
+		return tb.visitProcedureDecl(node)
 	case Assign:
 		return tb.visitAssign(node)
 	case Var:
 		return tb.visitVar(node)
 	default:
-		return errors.New(fmt.Sprintf("Unknown node type %T", node))
+		return errors.New(
+			fmt.Sprintf("(SymbolTableBuilder) Unknown node type %T", node))
 	}
 }
 
@@ -271,6 +283,10 @@ func (tb *SymbolTableBuilder) visitVarDecl(node AST) error {
 	return nil
 }
 
+func (tb *SymbolTableBuilder) visitProcedureDecl(node AST) error {
+	return nil
+}
+
 func (tb *SymbolTableBuilder) visitAssign(node AST) error {
 	varName := node.(Assign).Left.(Var).Value
 	_, ok := tb.Table.lookup(varName)
@@ -324,7 +340,6 @@ func lex(text string) ([]Token, error) {
 	i := 0
 	for i < len(text) {
 		c := text[i]
-		// fmt.Println(i, string(c))
 		switch {
 		case isDigit(c):
 			j := i
@@ -704,28 +719,61 @@ func (parser *Parser) block() (AST, error) {
 	return Block{declarationNodes, compoundStatementNode}, nil
 }
 
-func (parser *Parser) declarations() ([]VarDecl, error) {
+func (parser *Parser) declarations() ([]Decl, error) {
 	// declarations: VAR (variable_declaration SEMI)+
+	//             | (PROCEDURE ID SEMI block SEMI)*
 	//             | empty
-	var result []VarDecl
+	var result []Decl
 	currentToken := parser.currentToken()
 	if currentToken.Kind == keywordKind && currentToken.Value == "VAR" {
 		err := parser.eat(keywordKind, "VAR")
 		if err != nil {
-			return []VarDecl{}, err
+			return []Decl{}, err
 		}
 		for parser.currentToken().Kind == IDKind {
 			varDecls, err := parser.variableDeclarations()
 			if err != nil {
-				return []VarDecl{}, err
+				return []Decl{}, err
 			}
 			for _, varDecl := range varDecls {
 				result = append(result, varDecl)
 			}
 			err = parser.eatOnlyKind(semiKind)
 			if err != nil {
-				return []VarDecl{}, err
+				return []Decl{}, err
 			}
+		}
+	}
+
+	for parser.currentToken().Kind == keywordKind &&
+		parser.currentToken().Value == "PROCEDURE" {
+		err := parser.eat(keywordKind, "PROCEDURE")
+		if err != nil {
+			return []Decl{}, err
+		}
+
+		procName := parser.currentToken().Value
+
+		err = parser.eatOnlyKind(IDKind)
+		if err != nil {
+			return []Decl{}, err
+		}
+		err = parser.eatOnlyKind(semiKind)
+		if err != nil {
+			return []Decl{}, err
+		}
+
+		blockNode, err := parser.block()
+		if err != nil {
+			return []Decl{}, err
+		}
+
+		procDecl := ProcedureDecl{procName, blockNode.(Block)}
+		result = append(result, procDecl)
+
+		err = parser.eatOnlyKind(semiKind)
+		if err != nil {
+			return []Decl{}, err
 		}
 	}
 
@@ -876,7 +924,7 @@ func (itpr *Interpreter) visitBinOp(node AST) (interface{}, error) {
 		}
 		return left.(float64) / right.(float64), nil
 	default:
-		return nil, errors.New("Unkown Op")
+		return nil, errors.New("Unknown Op")
 	}
 }
 
@@ -956,6 +1004,10 @@ func (itpr *Interpreter) visitVarDecl(node AST) (interface{}, error) {
 	return nil, nil
 }
 
+func (itpr *Interpreter) visitProcedureDecl(node AST) (interface{}, error) {
+	return nil, nil
+}
+
 func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 	return nil, nil
 }
@@ -982,10 +1034,13 @@ func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 		return itpr.visitBlock(node)
 	case VarDecl:
 		return itpr.visitVarDecl(node)
+	case ProcedureDecl:
+		return itpr.visitProcedureDecl(node)
 	case Type:
 		return itpr.visitType(node)
 	default:
-		return nil, errors.New("Unknown node type")
+		return nil, errors.New(
+			fmt.Sprintf("(interpreter) Unknown node type %T", node))
 	}
 }
 
@@ -1001,7 +1056,7 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Println(tokens)
+	fmt.Println(tokens)
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
@@ -1036,10 +1091,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	fmt.Println(string(content))
 	_, err = do(string(content))
 
+	// TODO (Oct 5): Updating the parser
 	if err != nil {
 		log.Fatal(err)
 	}
