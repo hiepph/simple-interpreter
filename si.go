@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -90,8 +92,9 @@ type VarDecl struct {
 }
 
 type ProcedureDecl struct {
-	Name  string
-	Block Block
+	Name   string
+	Block  Block
+	Params []Param
 }
 
 type Type struct {
@@ -150,6 +153,11 @@ type Symbol struct {
 	// Category string // ??
 }
 
+type Param struct {
+	VarNode  Var
+	TypeNode Type
+}
+
 func NewBuiltinTypeSymbol(name string) Symbol {
 	return Symbol{name, "BUILT-IN"}
 }
@@ -164,12 +172,13 @@ var (
 )
 
 type SymbolTable struct {
-	Symbols map[string]Symbol
+	Symbols    map[string]Symbol
+	ScopeName  string
+	ScopeLevel int
 }
 
 func NewSymbolTable() SymbolTable {
-	t := SymbolTable{}
-	t.Symbols = make(map[string]Symbol)
+	t := SymbolTable{make(map[string]Symbol), "global", 1}
 
 	t.define(intType)
 	t.define(realType)
@@ -177,7 +186,7 @@ func NewSymbolTable() SymbolTable {
 }
 
 func (t SymbolTable) String() string {
-	b, err := json.MarshalIndent(t.Symbols, "", "  ")
+	b, err := json.MarshalIndent(t, "", "  ")
 	if err == nil {
 		return string(b)
 	}
@@ -195,6 +204,10 @@ func (t SymbolTable) lookup(name string) (Symbol, bool) {
 
 type SemanticAnalyzer struct {
 	Table SymbolTable
+}
+
+func NewSemanticAnalyzer() SemanticAnalyzer {
+	return SemanticAnalyzer{Table: NewSymbolTable()}
 }
 
 func (sa *SemanticAnalyzer) visit(node AST) error {
@@ -732,64 +745,139 @@ func (parser *Parser) block() (AST, error) {
 }
 
 func (parser *Parser) declarations() ([]Decl, error) {
-	// declarations: VAR (variable_declaration SEMI)+
-	//             | (PROCEDURE ID SEMI block SEMI)*
+	// declarations: (VAR (variable_declaration SEMI)+)*
+	//             | (PROCEDURE ID (LPAREN formal_parameter_list RPAREN)? SEMI block SEMI)*
 	//             | empty
 	var result []Decl
-	currentToken := parser.currentToken()
-	if currentToken.Kind == keywordKind && currentToken.Value == "VAR" {
-		err := parser.eat(keywordKind, "VAR")
-		if err != nil {
-			return []Decl{}, err
-		}
-		for parser.currentToken().Kind == IDKind {
-			varDecls, err := parser.variableDeclarations()
+	for {
+		if parser.currentToken().Kind == keywordKind &&
+			parser.currentToken().Value == "VAR" {
+			err := parser.eat(keywordKind, "VAR")
 			if err != nil {
 				return []Decl{}, err
 			}
-			for _, varDecl := range varDecls {
-				result = append(result, varDecl)
+			for parser.currentToken().Kind == IDKind {
+				varDecls, err := parser.variableDeclarations()
+				if err != nil {
+					return []Decl{}, err
+				}
+				for _, varDecl := range varDecls {
+					result = append(result, varDecl)
+				}
+				err = parser.eatOnlyKind(semiKind)
+				if err != nil {
+					return []Decl{}, err
+				}
 			}
+		} else if parser.currentToken().Kind == keywordKind &&
+			parser.currentToken().Value == "PROCEDURE" {
+			err := parser.eat(keywordKind, "PROCEDURE")
+			if err != nil {
+				return []Decl{}, err
+			}
+
+			procName := parser.currentToken().Value
+
+			err = parser.eatOnlyKind(IDKind)
+			if err != nil {
+				return []Decl{}, err
+			}
+
+			var params []Param
+			if parser.currentToken().Kind == operatorKind &&
+				parser.currentToken().Value == "LPAREN" {
+				parser.eat(operatorKind, "LPAREN")
+
+				params, err = parser.formalParameterList()
+				if err != nil {
+					return []Decl{}, err
+				}
+
+				err = parser.eat(operatorKind, "RPAREN")
+				if err != nil {
+					return []Decl{}, err
+				}
+			}
+
 			err = parser.eatOnlyKind(semiKind)
 			if err != nil {
 				return []Decl{}, err
 			}
-		}
-	}
 
-	for parser.currentToken().Kind == keywordKind &&
-		parser.currentToken().Value == "PROCEDURE" {
-		err := parser.eat(keywordKind, "PROCEDURE")
-		if err != nil {
-			return []Decl{}, err
-		}
+			blockNode, err := parser.block()
+			if err != nil {
+				return []Decl{}, err
+			}
 
-		procName := parser.currentToken().Value
+			procDecl := ProcedureDecl{procName, blockNode.(Block), params}
+			result = append(result, procDecl)
 
-		err = parser.eatOnlyKind(IDKind)
-		if err != nil {
-			return []Decl{}, err
-		}
-		err = parser.eatOnlyKind(semiKind)
-		if err != nil {
-			return []Decl{}, err
-		}
-
-		blockNode, err := parser.block()
-		if err != nil {
-			return []Decl{}, err
-		}
-
-		procDecl := ProcedureDecl{procName, blockNode.(Block)}
-		result = append(result, procDecl)
-
-		err = parser.eatOnlyKind(semiKind)
-		if err != nil {
-			return []Decl{}, err
+			err = parser.eatOnlyKind(semiKind)
+			if err != nil {
+				return []Decl{}, err
+			}
+		} else {
+			break
 		}
 	}
 
 	return result, nil
+}
+
+func (parser *Parser) formalParameterList() ([]Param, error) {
+	// formal_parameter_list: formal_parameters
+	//                      | formal_parameters SEMI formal_parameter_list
+	if parser.currentToken().Kind != IDKind {
+		return []Param{}, nil
+	}
+
+	paramNodes, err := parser.formalParameters()
+	if err != nil {
+		return []Param{}, err
+	}
+
+	for parser.currentToken().Kind == semiKind {
+		parser.eatOnlyKind(semiKind)
+		params, err := parser.formalParameters()
+		if err != nil {
+			return []Param{}, err
+		}
+		paramNodes = append(paramNodes, params...)
+	}
+
+	return paramNodes, nil
+}
+
+func (parser *Parser) formalParameters() ([]Param, error) {
+	// formal_parameters: ID (COMMA ID)* COLON type_spec
+	var paramNodes []Param
+
+	paramTokens := []Token{parser.currentToken()}
+	err := parser.eatOnlyKind(IDKind)
+	if err != nil {
+		return []Param{}, err
+	}
+
+	for parser.currentToken().Kind == commaKind {
+		parser.eatOnlyKind(commaKind)
+		paramTokens = append(paramTokens, parser.currentToken())
+		err = parser.eatOnlyKind(IDKind)
+		if err != nil {
+			return []Param{}, err
+		}
+	}
+
+	err = parser.eatOnlyKind(colonKind)
+	typeNode, err := parser.typeSpec()
+	if err != nil {
+		return []Param{}, err
+	}
+
+	for _, paramToken := range paramTokens {
+		paramNodes = append(paramNodes, Param{NewVar(paramToken), typeNode})
+	}
+
+	return paramNodes, nil
 }
 
 func (parser *Parser) variableDeclarations() ([]VarDecl, error) {
@@ -1068,7 +1156,9 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(tokens)
+	for i, token := range tokens {
+		fmt.Println(i, token)
+	}
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
@@ -1079,13 +1169,13 @@ func do(text string) (interface{}, error) {
 	fmt.Printf("%+v\n", node)
 
 	// 3. interpreter: generate result
-	symtabBuilder := SemanticAnalyzer{Table: NewSymbolTable()}
-	err = symtabBuilder.visit(node)
+	semanticAnalyzer := NewSemanticAnalyzer()
+	err = semanticAnalyzer.visit(node)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Println("------ SymbolTable --------")
-	fmt.Println(symtabBuilder.Table)
+	fmt.Println(semanticAnalyzer.Table)
 
 	// itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
 	// _, err = itpr.interprete()
@@ -1099,20 +1189,12 @@ func do(text string) (interface{}, error) {
 }
 
 func main() {
-	// content, err := ioutil.ReadFile(os.Args[1])
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Println(string(content))
-	// _, err = do(string(content))
-
-	_, err := do(`program SymTab6;
-   var x, y : integer;
-       y : real;
-begin
-   x := x + y;
-end.
-`)
+	content, err := ioutil.ReadFile(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(content))
+	_, err = do(string(content))
 
 	if err != nil {
 		log.Fatal(err)
