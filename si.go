@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type tokenKind uint
@@ -148,11 +147,20 @@ type NoOp struct{}
 type Symbol struct {
 	Name string
 	Type interface{}
+	// Category string // ??
+}
+
+func NewBuiltinTypeSymbol(name string) Symbol {
+	return Symbol{name, "BUILT-IN"}
+}
+
+func NewVarSymbol(name string, typ Symbol) Symbol {
+	return Symbol{name, typ}
 }
 
 var (
-	intType  = Symbol{"INTEGER", "BUILT-IN"}
-	realType = Symbol{"REAL", "BUILT-IN"}
+	intType  = NewBuiltinTypeSymbol("INTEGER")
+	realType = NewBuiltinTypeSymbol("REAL")
 )
 
 type SymbolTable struct {
@@ -185,62 +193,62 @@ func (t SymbolTable) lookup(name string) (Symbol, bool) {
 	return s, ok
 }
 
-type SymbolTableBuilder struct {
+type SemanticAnalyzer struct {
 	Table SymbolTable
 }
 
-func (tb *SymbolTableBuilder) visit(node AST) error {
+func (sa *SemanticAnalyzer) visit(node AST) error {
 	switch node.(type) {
 	case Program:
-		return tb.visitProgram(node)
+		return sa.visitProgram(node)
 	case Block:
-		return tb.visitBlock(node)
+		return sa.visitBlock(node)
 	case BinOp:
-		return tb.visitBinOp(node)
+		return sa.visitBinOp(node)
 	case Num:
-		return tb.visitNum(node)
+		return sa.visitNum(node)
 	case UnaryOp:
-		return tb.visitUnaryOp(node)
+		return sa.visitUnaryOp(node)
 	case Compound:
-		return tb.visitCompound(node)
+		return sa.visitCompound(node)
 	case NoOp:
-		return tb.visitNoOp(node)
+		return sa.visitNoOp(node)
 	case VarDecl:
-		return tb.visitVarDecl(node)
+		return sa.visitVarDecl(node)
 	case ProcedureDecl:
-		return tb.visitProcedureDecl(node)
+		return sa.visitProcedureDecl(node)
 	case Assign:
-		return tb.visitAssign(node)
+		return sa.visitAssign(node)
 	case Var:
-		return tb.visitVar(node)
+		return sa.visitVar(node)
 	default:
 		return errors.New(
-			fmt.Sprintf("(SymbolTableBuilder) Unknown node type %T", node))
+			fmt.Sprintf("(SemanticAnalyzer) Unknown node type %T", node))
 	}
 }
 
-func (tb *SymbolTableBuilder) visitBlock(node AST) error {
+func (sa *SemanticAnalyzer) visitBlock(node AST) error {
 	for _, dec := range node.(Block).Declarations {
-		err := tb.visit(dec)
+		err := sa.visit(dec)
 		if err != nil {
 			return err
 		}
 	}
-	return tb.visit(node.(Block).CompoundStatement)
+	return sa.visit(node.(Block).CompoundStatement)
 }
 
-func (tb *SymbolTableBuilder) visitProgram(node AST) error {
-	return tb.visit(node.(Program).Block)
+func (sa *SemanticAnalyzer) visitProgram(node AST) error {
+	return sa.visit(node.(Program).Block)
 }
 
-func (tb *SymbolTableBuilder) visitBinOp(node AST) error {
+func (sa *SemanticAnalyzer) visitBinOp(node AST) error {
 	nodeBinOp := node.(BinOp)
 
-	err := tb.visit(nodeBinOp.Left)
+	err := sa.visit(nodeBinOp.Left)
 	if err != nil {
 		return err
 	}
-	err = tb.visit(nodeBinOp.Right)
+	err = sa.visit(nodeBinOp.Right)
 	if err != nil {
 		return err
 	}
@@ -248,17 +256,17 @@ func (tb *SymbolTableBuilder) visitBinOp(node AST) error {
 	return nil
 }
 
-func (tb *SymbolTableBuilder) visitNum(node AST) error {
+func (sa *SemanticAnalyzer) visitNum(node AST) error {
 	return nil
 }
 
-func (tb *SymbolTableBuilder) visitUnaryOp(node AST) error {
-	return tb.visit(node.(UnaryOp).expr)
+func (sa *SemanticAnalyzer) visitUnaryOp(node AST) error {
+	return sa.visit(node.(UnaryOp).expr)
 }
 
-func (tb *SymbolTableBuilder) visitCompound(node AST) error {
+func (sa *SemanticAnalyzer) visitCompound(node AST) error {
 	for _, child := range node.(Compound).Children {
-		err := tb.visit(child)
+		err := sa.visit(child)
 		if err != nil {
 			return err
 		}
@@ -267,38 +275,42 @@ func (tb *SymbolTableBuilder) visitCompound(node AST) error {
 	return nil
 }
 
-func (tb *SymbolTableBuilder) visitNoOp(node AST) error {
+func (sa *SemanticAnalyzer) visitNoOp(node AST) error {
 	return nil
 }
 
-func (tb *SymbolTableBuilder) visitVarDecl(node AST) error {
+func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
 	typeName := node.(VarDecl).TypeNode.Token.Value
-	typeSymbol, ok := tb.Table.lookup(typeName)
+	typeSymbol, ok := sa.Table.lookup(typeName)
 	if !ok {
 		return errors.New(fmt.Sprintf("(VarDecl) Can't not find key %s\n", typeName))
 	}
 	varName := node.(VarDecl).VarNode.Token.Value
-	varSymbol := Symbol{varName, typeSymbol}
-	tb.Table.define(varSymbol)
+	varSymbol := NewVarSymbol(varName, typeSymbol)
+	_, ok = sa.Table.lookup(varName)
+	if ok {
+		return errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
+	}
+	sa.Table.define(varSymbol)
 	return nil
 }
 
-func (tb *SymbolTableBuilder) visitProcedureDecl(node AST) error {
+func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 	return nil
 }
 
-func (tb *SymbolTableBuilder) visitAssign(node AST) error {
+func (sa *SemanticAnalyzer) visitAssign(node AST) error {
 	varName := node.(Assign).Left.(Var).Value
-	_, ok := tb.Table.lookup(varName)
+	_, ok := sa.Table.lookup(varName)
 	if !ok {
 		return errors.New(fmt.Sprintf("(Assign) Can't not find key %s\n", varName))
 	}
-	return tb.visit(node.(Assign).Right)
+	return sa.visit(node.(Assign).Right)
 }
 
-func (tb *SymbolTableBuilder) visitVar(node AST) error {
+func (sa *SemanticAnalyzer) visitVar(node AST) error {
 	varName := node.(Var).Value
-	_, ok := tb.Table.lookup(varName)
+	_, ok := sa.Table.lookup(varName)
 	if !ok {
 		return errors.New(fmt.Sprintf("(Var) Can't not find key %s\n", varName))
 	}
@@ -385,11 +397,11 @@ func lex(text string) ([]Token, error) {
 			for ; j < len(text) && (isDigit(text[j]) || isChar(text[j])); j++ {
 			}
 			s := text[i:j]
-			if contains(keywordList, s) {
-				if s == "DIV" {
+			if contains(keywordList, strings.ToUpper(s)) {
+				if strings.ToUpper("s") == "DIV" {
 					token = Token{operatorKind, "DIV", -1}
 				} else {
-					token = Token{keywordKind, s, -1}
+					token = Token{keywordKind, strings.ToUpper(s), -1}
 				}
 			} else {
 				token = Token{IDKind, s, -1}
@@ -847,7 +859,7 @@ type Interpreter struct {
 	globalScope map[string]interface{}
 }
 
-func (itpr *Interpreter) visitBinOp(node AST) (interface{}, error) {
+func (itpr *Interpreter) visisainOp(node AST) (interface{}, error) {
 	nodeBinOp := node.(BinOp)
 
 	left, err := itpr.visit(nodeBinOp.Left)
@@ -990,7 +1002,7 @@ func (itpr *Interpreter) visitProgram(node AST) (interface{}, error) {
 	return itpr.visit(node.(Program).Block)
 }
 
-func (itpr *Interpreter) visitBlock(node AST) (interface{}, error) {
+func (itpr *Interpreter) visisalock(node AST) (interface{}, error) {
 	for _, dec := range node.(Block).Declarations {
 		_, err := itpr.visit(dec)
 		if err != nil {
@@ -1015,7 +1027,7 @@ func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 	switch node.(type) {
 	case BinOp:
-		return itpr.visitBinOp(node)
+		return itpr.visisainOp(node)
 	case Num:
 		return itpr.visitNum(node)
 	case UnaryOp:
@@ -1031,7 +1043,7 @@ func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 	case Program:
 		return itpr.visitProgram(node)
 	case Block:
-		return itpr.visitBlock(node)
+		return itpr.visisalock(node)
 	case VarDecl:
 		return itpr.visitVarDecl(node)
 	case ProcedureDecl:
@@ -1067,15 +1079,7 @@ func do(text string) (interface{}, error) {
 	fmt.Printf("%+v\n", node)
 
 	// 3. interpreter: generate result
-	itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
-	_, err = itpr.interprete()
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("-------- globalScope -------")
-	fmt.Println(itpr.globalScope)
-
-	symtabBuilder := SymbolTableBuilder{Table: NewSymbolTable()}
+	symtabBuilder := SemanticAnalyzer{Table: NewSymbolTable()}
 	err = symtabBuilder.visit(node)
 	if err != nil {
 		return nil, err
@@ -1083,18 +1087,33 @@ func do(text string) (interface{}, error) {
 	fmt.Println("------ SymbolTable --------")
 	fmt.Println(symtabBuilder.Table)
 
+	// itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
+	// _, err = itpr.interprete()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// fmt.Println("-------- globalScope -------")
+	// fmt.Println(itpr.globalScope)
+
 	return nil, nil
 }
 
 func main() {
-	content, err := ioutil.ReadFile(os.Args[1])
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(content))
-	_, err = do(string(content))
+	// content, err := ioutil.ReadFile(os.Args[1])
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// fmt.Println(string(content))
+	// _, err = do(string(content))
 
-	// TODO (Oct 5): Updating the parser
+	_, err := do(`program SymTab6;
+   var x, y : integer;
+       y : real;
+begin
+   x := x + y;
+end.
+`)
+
 	if err != nil {
 		log.Fatal(err)
 	}
