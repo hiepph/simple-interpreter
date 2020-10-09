@@ -73,6 +73,44 @@ type Token struct {
 type AST interface {
 }
 
+func draw(node AST, indicator string) {
+	var (
+		emptySpace = "    "
+		middleItem = "├── "
+		// continueItem = "│  "
+		// lastItem     = "└──"
+	)
+
+	fmt.Printf(indicator + middleItem)
+	indicator += emptySpace
+	var children []AST
+	switch node.(type) {
+	case Program:
+		fmt.Printf("%T %v\n", node, node.(Program).Name)
+		children = []AST{node.(Program).Block}
+	case Block:
+		fmt.Printf("%T\n", node)
+		for _, dec := range node.(Block).Declarations {
+			children = append(children, dec)
+		}
+		children = append(children, node.(Block).CompoundStatement)
+	case ProcedureDecl:
+		fmt.Printf("%T: %v\n", node, node.(ProcedureDecl).Name)
+	case VarDecl:
+		fmt.Printf("%T\n", node)
+		children = []AST{node.(VarDecl).VarNode,
+			node.(VarDecl).TypeNode}
+	case Var:
+		fmt.Printf("%s\n", node.(Var).Value)
+	case Type:
+		fmt.Printf("%s\n", node.(Type).Token.Value)
+	default:
+	}
+	for _, child := range children {
+		draw(child, indicator)
+	}
+}
+
 type Program struct {
 	Name  string
 	Block Block
@@ -1156,9 +1194,9 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i, token := range tokens {
-		fmt.Println(i, token)
-	}
+	// for i, token := range tokens {
+	// 	fmt.Println(i, token)
+	// }
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
@@ -1167,6 +1205,8 @@ func do(text string) (interface{}, error) {
 		return nil, err
 	}
 	fmt.Printf("%+v\n", node)
+	draw(node, "")
+	fmt.Println()
 
 	// 3. interpreter: generate result
 	semanticAnalyzer := NewSemanticAnalyzer()
@@ -1193,7 +1233,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(string(content))
+	// fmt.Println(string(content))
 	_, err = do(string(content))
 
 	if err != nil {
