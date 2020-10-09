@@ -86,7 +86,7 @@ func draw(node AST, indicator string) {
 	var children []AST
 	switch node.(type) {
 	case Program:
-		fmt.Printf("%T %v\n", node, node.(Program).Name)
+		fmt.Printf("%T\n", node)
 		children = []AST{node.(Program).Block}
 	case Block:
 		fmt.Printf("%T\n", node)
@@ -96,6 +96,19 @@ func draw(node AST, indicator string) {
 		children = append(children, node.(Block).CompoundStatement)
 	case ProcedureDecl:
 		fmt.Printf("%T: %v\n", node, node.(ProcedureDecl).Name)
+		for _, param := range node.(ProcedureDecl).Params {
+			children = append(children, param)
+		}
+		children = append(children, node.(ProcedureDecl).Block)
+	case Compound:
+		fmt.Printf("%T\n", node)
+		for _, child := range node.(Compound).Children {
+			children = append(children, child)
+		}
+	case Param:
+		fmt.Printf("%T\n", node)
+		children = []AST{node.(Param).VarNode,
+			node.(Param).TypeNode}
 	case VarDecl:
 		fmt.Printf("%T\n", node)
 		children = []AST{node.(VarDecl).VarNode,
@@ -104,7 +117,18 @@ func draw(node AST, indicator string) {
 		fmt.Printf("%s\n", node.(Var).Value)
 	case Type:
 		fmt.Printf("%s\n", node.(Type).Token.Value)
+	case Assign:
+		fmt.Printf("%v\n", node.(Assign).Op.Value)
+		children = append(children, node.(Assign).Left)
+		children = append(children, node.(Assign).Right)
+	case BinOp:
+		fmt.Printf("%v\n", node.(BinOp).Op.Value)
+		children = append(children, node.(BinOp).Left)
+		children = append(children, node.(BinOp).Right)
+	case Num:
+		fmt.Printf("%v\n", node.(Num).Token.NumericValue)
 	default:
+		fmt.Printf("%T\n", node)
 	}
 	for _, child := range children {
 		draw(child, indicator)
@@ -118,7 +142,7 @@ type Program struct {
 
 type Block struct {
 	Declarations      []Decl
-	CompoundStatement AST
+	CompoundStatement Compound
 }
 
 type Decl interface {
@@ -779,7 +803,7 @@ func (parser *Parser) block() (AST, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Block{declarationNodes, compoundStatementNode}, nil
+	return Block{declarationNodes, compoundStatementNode.(Compound)}, nil
 }
 
 func (parser *Parser) declarations() ([]Decl, error) {
@@ -1204,7 +1228,6 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("%+v\n", node)
 	draw(node, "")
 	fmt.Println()
 
