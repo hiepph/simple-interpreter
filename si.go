@@ -210,9 +210,9 @@ func NewVar(token Token) Var {
 type NoOp struct{}
 
 type Symbol struct {
-	Name string
-	Type interface{}
-	// Category string // ??
+	Name   string
+	Type   interface{}
+	Params []interface{}
 }
 
 type Param struct {
@@ -221,11 +221,22 @@ type Param struct {
 }
 
 func NewBuiltinTypeSymbol(name string) Symbol {
-	return Symbol{name, "BUILT-IN"}
+	var noParams []interface{}
+	return Symbol{name, "BUILT-IN", noParams}
 }
 
 func NewVarSymbol(name string, typ Symbol) Symbol {
-	return Symbol{name, typ}
+	var noParams []interface{}
+	return Symbol{name, typ, noParams}
+}
+
+func NewProcedureSymbol(name string) Symbol {
+	var noParams []interface{}
+	return Symbol{name, "Procedure", noParams}
+}
+
+func (s *Symbol) addParam(param Symbol) {
+	s.Params = append(s.Params, param)
 }
 
 var (
@@ -239,9 +250,8 @@ type SymbolTable struct {
 	ScopeLevel int
 }
 
-func NewSymbolTable() SymbolTable {
-	t := SymbolTable{make(map[string]Symbol), "global", 1}
-
+func NewSymbolTable(name string, level int) SymbolTable {
+	t := SymbolTable{make(map[string]Symbol), name, level}
 	t.define(intType)
 	t.define(realType)
 	return t
@@ -313,6 +323,9 @@ func (sa *SemanticAnalyzer) visitBlock(node AST) error {
 }
 
 func (sa *SemanticAnalyzer) visitProgram(node AST) error {
+	globalScope := NewSymbolTable("global", 1)
+	sa.Table = globalScope
+
 	return sa.visit(node.(Program).Block)
 }
 
@@ -371,7 +384,26 @@ func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
 }
 
 func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
-	return nil
+	procName := node.(ProcedureDecl).Name
+	procSymbol := NewProcedureSymbol(procName)
+	sa.Table.define(procSymbol)
+
+	procedureScope := NewSymbolTable(procName, 2)
+	sa.Table = procedureScope
+
+	for _, param := range node.(ProcedureDecl).Params {
+		typeName := param.TypeNode.Token.Value
+		paramType, ok := sa.Table.lookup(typeName)
+		if !ok {
+			return errors.New(fmt.Sprintf("(ProcedureDecl) Can't not find key %s\n", typeName))
+		}
+		paramName := param.VarNode.Token.Value
+		varSymbol := NewVarSymbol(paramName, paramType)
+		sa.Table.define(varSymbol)
+		procSymbol.addParam(varSymbol)
+	}
+
+	return sa.visit(node.(ProcedureDecl).Block)
 }
 
 func (sa *SemanticAnalyzer) visitAssign(node AST) error {
