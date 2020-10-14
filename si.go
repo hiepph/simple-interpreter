@@ -245,13 +245,14 @@ var (
 )
 
 type SymbolTable struct {
-	Symbols    map[string]Symbol
-	ScopeName  string
-	ScopeLevel int
+	Symbols        map[string]Symbol
+	ScopeName      string
+	ScopeLevel     int
+	EnclosingScope interface{}
 }
 
 func NewSymbolTable(name string, level int) SymbolTable {
-	t := SymbolTable{make(map[string]Symbol), name, level}
+	t := SymbolTable{make(map[string]Symbol), name, level, nil}
 	t.define(intType)
 	t.define(realType)
 	return t
@@ -279,7 +280,7 @@ type SemanticAnalyzer struct {
 }
 
 func NewSemanticAnalyzer() SemanticAnalyzer {
-	return SemanticAnalyzer{Table: NewSymbolTable()}
+	return SemanticAnalyzer{}
 }
 
 func (sa *SemanticAnalyzer) visit(node AST) error {
@@ -388,7 +389,10 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 	procSymbol := NewProcedureSymbol(procName)
 	sa.Table.define(procSymbol)
 
-	procedureScope := NewSymbolTable(procName, 2)
+	// log.Println(sa.Table)
+
+	procedureScope := NewSymbolTable(procName, sa.Table.ScopeLevel+1)
+	procedureScope.EnclosingScope = sa.Table
 	sa.Table = procedureScope
 
 	for _, param := range node.(ProcedureDecl).Params {
