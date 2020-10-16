@@ -389,10 +389,11 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 	procSymbol := NewProcedureSymbol(procName)
 	sa.Table.define(procSymbol)
 
-	// log.Println(sa.Table)
-
 	procedureScope := NewSymbolTable(procName, sa.Table.ScopeLevel+1)
 	procedureScope.EnclosingScope = sa.Table
+
+	log.Printf("ENTER scope: %s\n", procName)
+	// jump into child table
 	sa.Table = procedureScope
 
 	for _, param := range node.(ProcedureDecl).Params {
@@ -407,7 +408,17 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 		procSymbol.addParam(varSymbol)
 	}
 
-	return sa.visit(node.(ProcedureDecl).Block)
+	err := sa.visit(node.(ProcedureDecl).Block)
+	if err != nil {
+		return err
+	}
+	log.Println(sa.Table)
+
+	// jump back into parent table
+	sa.Table = procedureScope.EnclosingScope.(SymbolTable)
+
+	log.Printf("LEAVE scope: %s\n", procName)
+	return nil
 }
 
 func (sa *SemanticAnalyzer) visitAssign(node AST) error {
