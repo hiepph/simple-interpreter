@@ -253,8 +253,8 @@ type SymbolTable struct {
 
 func NewSymbolTable(name string, level int) SymbolTable {
 	t := SymbolTable{make(map[string]Symbol), name, level, nil}
-	t.define(intType)
-	t.define(realType)
+	// t.insert(intType)
+	// t.insert(realType)
 	return t
 }
 
@@ -266,13 +266,23 @@ func (t SymbolTable) String() string {
 	return ""
 }
 
-func (t *SymbolTable) define(symbol Symbol) {
+func (t *SymbolTable) insert(symbol Symbol) {
+	log.Printf("INSERT: %s\n", symbol.Name)
 	t.Symbols[symbol.Name] = symbol
 }
 
 func (t SymbolTable) lookup(name string) (Symbol, bool) {
+	log.Printf("LOOKUP: %s (scope name: %s)\n", name, t.ScopeName)
 	s, ok := t.Symbols[name]
-	return s, ok
+	if ok {
+		return s, ok
+	}
+
+	if t.EnclosingScope == nil {
+		return Symbol{}, false
+	}
+	// recursively search parent table
+	return t.EnclosingScope.(SymbolTable).lookup(name)
 }
 
 type SemanticAnalyzer struct {
@@ -324,10 +334,19 @@ func (sa *SemanticAnalyzer) visitBlock(node AST) error {
 }
 
 func (sa *SemanticAnalyzer) visitProgram(node AST) error {
+	log.Println("ENTER scope: global")
 	globalScope := NewSymbolTable("global", 1)
+	globalScope.insert(intType)
+	globalScope.insert(realType)
 	sa.Table = globalScope
 
-	return sa.visit(node.(Program).Block)
+	err := sa.visit(node.(Program).Block)
+	if err != nil {
+		return err
+	}
+
+	log.Println("LEAVE scope: global")
+	return nil
 }
 
 func (sa *SemanticAnalyzer) visitBinOp(node AST) error {
@@ -376,23 +395,23 @@ func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
 	}
 	varName := node.(VarDecl).VarNode.Token.Value
 	varSymbol := NewVarSymbol(varName, typeSymbol)
-	_, ok = sa.Table.lookup(varName)
-	if ok {
-		return errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
-	}
-	sa.Table.define(varSymbol)
+	// _, ok = sa.Table.lookup(varName)
+	// if ok {
+	// 	return errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
+	// }
+	sa.Table.insert(varSymbol)
 	return nil
 }
 
 func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 	procName := node.(ProcedureDecl).Name
 	procSymbol := NewProcedureSymbol(procName)
-	sa.Table.define(procSymbol)
+	sa.Table.insert(procSymbol)
 
+	log.Printf("ENTER scope: %s\n", procName)
 	procedureScope := NewSymbolTable(procName, sa.Table.ScopeLevel+1)
 	procedureScope.EnclosingScope = sa.Table
 
-	log.Printf("ENTER scope: %s\n", procName)
 	// jump into child table
 	sa.Table = procedureScope
 
@@ -404,7 +423,7 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 		}
 		paramName := param.VarNode.Token.Value
 		varSymbol := NewVarSymbol(paramName, paramType)
-		sa.Table.define(varSymbol)
+		sa.Table.insert(varSymbol)
 		procSymbol.addParam(varSymbol)
 	}
 

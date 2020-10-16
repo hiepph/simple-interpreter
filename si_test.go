@@ -8,12 +8,12 @@ import (
 )
 
 func TestSymbol(t *testing.T) {
-	table := NewSymbolTable()
+	table := NewSymbolTable("global", 1)
 
 	varXSymbol := NewVarSymbol("x", intType)
 	varYSymbol := NewVarSymbol("y", realType)
-	table.define(varXSymbol)
-	table.define(varYSymbol)
+	table.insert(varXSymbol)
+	table.insert(varYSymbol)
 	log.Println(table)
 
 	resX, ok := table.lookup("x")
