@@ -24,8 +24,7 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// draw(node, "")
-	// fmt.Println()
+	draw(node, "")
 
 	// 3. interpreter: generate result
 	// semanticAnalyzer := NewSemanticAnalyzer()

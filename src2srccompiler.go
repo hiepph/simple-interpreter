@@ -162,11 +162,12 @@ func (c *SourceToSourceCompiler) visitProcedureDecl(node AST) (string, error) {
 	// jump back into parent table
 	c.Table = procedureScope.EnclosingScope.(SymbolTable)
 
-	// indent
-	for i := 0; i < len(result); i++ {
-		result[i] = INDENT + result[i]
+	// indent procedure
+	indentResult := []string{}
+	for _, l := range strings.Split(strings.Join(result, "\n"), "\n") {
+		indentResult = append(indentResult, INDENT+l)
 	}
-	return strings.Join(result, "\n"), nil
+	return strings.Join(indentResult, "\n"), nil
 }
 
 func (c *SourceToSourceCompiler) visitNoOp(node AST) (string, error) {
