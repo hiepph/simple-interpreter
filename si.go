@@ -24,17 +24,17 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	draw(node, "")
-	fmt.Println()
+	// draw(node, "")
+	// fmt.Println()
 
 	// 3. interpreter: generate result
-	semanticAnalyzer := NewSemanticAnalyzer()
-	err = semanticAnalyzer.visit(node)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("------ SymbolTable --------")
-	fmt.Println(semanticAnalyzer.Table)
+	// semanticAnalyzer := NewSemanticAnalyzer()
+	// err = semanticAnalyzer.visit(node)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// fmt.Println("------ SymbolTable --------")
+	// fmt.Println(semanticAnalyzer.Table)
 
 	// source-to-source compiler
 	src2srcCompiler := NewSourceToSourceCompiler()
