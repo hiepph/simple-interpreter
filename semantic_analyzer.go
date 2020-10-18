@@ -11,21 +11,22 @@ type Symbol struct {
 	Name   string
 	Type   interface{}
 	Params []interface{}
+	Scope  SymbolTable
 }
 
 func NewBuiltinTypeSymbol(name string) Symbol {
 	var noParams []interface{}
-	return Symbol{name, "BUILT-IN", noParams}
+	return Symbol{name, "BUILT-IN", noParams, SymbolTable{}}
 }
 
 func NewVarSymbol(name string, typ Symbol) Symbol {
 	var noParams []interface{}
-	return Symbol{name, typ, noParams}
+	return Symbol{name, typ, noParams, SymbolTable{}}
 }
 
 func NewProcedureSymbol(name string) Symbol {
 	var noParams []interface{}
-	return Symbol{name, "Procedure", noParams}
+	return Symbol{name, "Procedure", noParams, SymbolTable{}}
 }
 
 func (s *Symbol) addParam(param Symbol) {
@@ -60,12 +61,15 @@ func (t SymbolTable) String() string {
 }
 
 func (t *SymbolTable) insert(symbol Symbol) {
+	// store scope for accessing variable's scope level
+	symbol.Scope = *t
 	log.Printf("INSERT: %s\n", symbol.Name)
 	t.Symbols[symbol.Name] = symbol
 }
 
 func (t SymbolTable) lookup(name string) (Symbol, bool) {
-	log.Printf("LOOKUP: %s (scope name: %s)\n", name, t.ScopeName)
+	log.Printf("LOOKUP: %s (scope name: %s)\n",
+		name, t.ScopeName)
 	s, ok := t.Symbols[name]
 	if ok {
 		return s, ok

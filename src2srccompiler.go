@@ -24,12 +24,8 @@ func (c *SourceToSourceCompiler) visit(node AST) (string, error) {
 		return c.visitProgram(node)
 	case Block:
 		return c.visitBlock(node)
-	// case BinOp:
-	// 	return c.visitBinOp(node)
-	// case Num:
-	// 	return c.visitNum(node)
-	// case UnaryOp:
-	// 	return c.visitUnaryOp(node)
+	case BinOp:
+		return c.visitBinOp(node)
 	case Compound:
 		return c.visitCompound(node)
 	case NoOp:
@@ -38,10 +34,10 @@ func (c *SourceToSourceCompiler) visit(node AST) (string, error) {
 		return c.visitVarDecl(node)
 	case ProcedureDecl:
 		return c.visitProcedureDecl(node)
-	// case Assign:
-	// 	return c.visitAssign(node)
-	// case Var:
-	// 	return c.visitVar(node)
+	case Assign:
+		return c.visitAssign(node)
+	case Var:
+		return c.visitVar(node)
 	default:
 		return "", errors.New(
 			fmt.Sprintf("(SourceToSourceCompiler) Unknown node type %T", node))
@@ -125,10 +121,11 @@ func (c *SourceToSourceCompiler) visitProcedureDecl(node AST) (string, error) {
 	procedureScope := NewSymbolTable(procName, c.Table.ScopeLevel+1)
 	procedureScope.EnclosingScope = c.Table
 
+	procedureStr := fmt.Sprintf("PROCEDURE %s%d", procName, c.Table.ScopeLevel)
+
 	// jump into child table
 	c.Table = procedureScope
 
-	procedureStr := fmt.Sprintf("PROCEDURE %s%d", procName, c.Table.ScopeLevel)
 	params := node.(ProcedureDecl).Params
 	if len(params) > 0 {
 		procedureStr += "("
@@ -174,11 +171,37 @@ func (c *SourceToSourceCompiler) visitNoOp(node AST) (string, error) {
 	return "", nil
 }
 
-// func (c *SourceToSourceCompiler) visitAssign(node AST) (string, error) {
-// 	varName := node.(Assign).Left.(Var).Value
-// 	_, ok := c.Table.lookup(varName)
-// 	if !ok {
-// 		return errors.New(fmt.Sprintf("(Assign) Can't not find key %s\n", varName))
-// 	}
-// 	return c.visit(node.(Assign).Right)
-// }
+func (c *SourceToSourceCompiler) visitAssign(node AST) (string, error) {
+	sr, err := c.visit(node.(Assign).Right)
+	if err != nil {
+		return "", err
+	}
+	sl, err := c.visit(node.(Assign).Left)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s := %s;", sl, sr), nil
+}
+
+func (c *SourceToSourceCompiler) visitVar(node AST) (string, error) {
+	varName := node.(Var).Value
+	varSymbol, ok := c.Table.lookup(varName)
+	if !ok {
+		return "", errors.New(fmt.Sprintf("(Var) Can't not find key %s\n", varName))
+	}
+
+	return fmt.Sprintf("<%s%d:%s>", varName, varSymbol.Scope.ScopeLevel,
+		varSymbol.Type.(Symbol).Name), nil
+}
+
+func (c *SourceToSourceCompiler) visitBinOp(node AST) (string, error) {
+	sr, err := c.visit(node.(BinOp).Right)
+	if err != nil {
+		return "", err
+	}
+	sl, err := c.visit(node.(BinOp).Left)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s %s %s", sl, node.(BinOp).Op.Value, sr), nil
+}

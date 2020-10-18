@@ -315,11 +315,11 @@ func (parser *Parser) empty() (AST, error) {
 }
 
 func (parser *Parser) factor() (AST, error) {
-	// factor : PLUS factor
-	//        | MINUS factor
+	// factor : + factor
+	//        | - factor
 	//        | INTEGER_CONST
 	//        | REAL_CONST
-	//        | LPAREN expr RPAREN
+	//        | ( expr )
 	//        | variable
 	token := parser.currentToken()
 
@@ -336,8 +336,8 @@ func (parser *Parser) factor() (AST, error) {
 		}
 		return NewNum(token), nil
 	case operatorKind:
-		if token.Value == "LPAREN" {
-			err = parser.eat(operatorKind, "LPAREN")
+		if token.Value == "(" {
+			err = parser.eat(operatorKind, "(")
 			if err != nil {
 				return nil, err
 			}
@@ -345,12 +345,12 @@ func (parser *Parser) factor() (AST, error) {
 			if err != nil {
 				return nil, err
 			}
-			err = parser.eat(operatorKind, "RPAREN")
+			err = parser.eat(operatorKind, ")")
 			if err != nil {
 				return nil, err
 			}
 			return node, nil
-		} else if token.Value == "PLUS" || token.Value == "MINUS" {
+		} else if token.Value == "+" || token.Value == "-" {
 			err = parser.eat(operatorKind, token.Value)
 			fact, err := parser.factor()
 			if err != nil {
@@ -367,7 +367,7 @@ func (parser *Parser) factor() (AST, error) {
 }
 
 func (parser *Parser) term() (AST, error) {
-	// term : factor ((MUL | DIV | FLOAT_DIV) factor)*
+	// term : factor ((* | DIV | /) factor)*
 	var err error
 
 	node, err := parser.factor()
@@ -376,15 +376,15 @@ func (parser *Parser) term() (AST, error) {
 	}
 
 	for parser.currentToken().Kind == operatorKind &&
-		contains([]string{"MUL", "DIV", "FLOAT_DIV"}, parser.currentToken().Value) {
+		contains([]string{"*", "DIV", "/"}, parser.currentToken().Value) {
 		token := parser.currentToken()
 		switch token.Value {
-		case "MUL":
-			err = parser.eat(operatorKind, "MUL")
+		case "*":
+			err = parser.eat(operatorKind, "*")
 		case "DIV":
 			err = parser.eat(operatorKind, "DIV")
-		case "FLOAT_DIV":
-			err = parser.eat(operatorKind, "FLOAT_DIV")
+		case "/":
+			err = parser.eat(operatorKind, "/")
 		}
 		if err != nil {
 			return nil, err
@@ -401,25 +401,25 @@ func (parser *Parser) term() (AST, error) {
 }
 
 func (parser *Parser) expr() (AST, error) {
-	// expr: term ((MUL|DIV)term)*
-	// term: factor ((MUL|DIV)factor)*
-	// factor: (PLUS|MINUS) factor | INTEGER | LPAREN expr RPAREN
+	// expr: term ((*|DIV)term)*
+	// term: factor ((*|DIV)factor)*
+	// factor: (+|-) factor | INTEGER | ( expr )
 	node, err := parser.term()
 	if err != nil {
 		return nil, err
 	}
 
 	for parser.currentToken().Kind == operatorKind &&
-		contains([]string{"PLUS", "MINUS"}, parser.currentToken().Value) {
+		contains([]string{"+", "-"}, parser.currentToken().Value) {
 		token := parser.currentToken()
 		switch token.Value {
-		case "PLUS":
-			err := parser.eat(operatorKind, "PLUS")
+		case "+":
+			err := parser.eat(operatorKind, "+")
 			if err != nil {
 				return nil, err
 			}
-		case "MINUS":
-			err := parser.eat(operatorKind, "MINUS")
+		case "-":
+			err := parser.eat(operatorKind, "-")
 			if err != nil {
 				return nil, err
 			}
@@ -449,7 +449,7 @@ func (parser *Parser) block() (AST, error) {
 
 func (parser *Parser) declarations() ([]Decl, error) {
 	// declarations: (VAR (variable_declaration SEMI)+)*
-	//             | (PROCEDURE ID (LPAREN formal_parameter_list RPAREN)? SEMI block SEMI)*
+	//             | (PROCEDURE ID (( formal_parameter_list ))? SEMI block SEMI)*
 	//             | empty
 	var result []Decl
 	for {
@@ -488,15 +488,15 @@ func (parser *Parser) declarations() ([]Decl, error) {
 
 			var params []Param
 			if parser.currentToken().Kind == operatorKind &&
-				parser.currentToken().Value == "LPAREN" {
-				parser.eat(operatorKind, "LPAREN")
+				parser.currentToken().Value == "(" {
+				parser.eat(operatorKind, "(")
 
 				params, err = parser.formalParameterList()
 				if err != nil {
 					return []Decl{}, err
 				}
 
-				err = parser.eat(operatorKind, "RPAREN")
+				err = parser.eat(operatorKind, ")")
 				if err != nil {
 					return []Decl{}, err
 				}

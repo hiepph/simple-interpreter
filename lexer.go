@@ -35,29 +35,11 @@ func (e tokenKind) String() string {
 		"colonKind"}[e]
 }
 
-type Operator string
-
-const (
-	PLUS      Operator = "PLUS"
-	MINUS     Operator = "MINUS"
-	MUL       Operator = "MUL"
-	DIV       Operator = "DIV"
-	FLOAT_DIV Operator = "FLOAT_DIV"
-	LPAREN    Operator = "LPAREN"
-	RPAREN    Operator = "RPAREN"
+var (
+	operatorList = []string{"+", "-", "*", "/", "(", ")"}
+	keywordList  = []string{"BEGIN", "END", "PROCEDURE", "PROGRAM",
+		"VAR", "DIV", "INTEGER", "REAL"}
 )
-
-var operatorDictionary = map[string]Operator{
-	"+": PLUS,
-	"-": MINUS,
-	"*": MUL,
-	"/": FLOAT_DIV,
-	"(": LPAREN,
-	")": RPAREN,
-}
-
-var keywordList = []string{"BEGIN", "END", "PROCEDURE", "PROGRAM",
-	"VAR", "DIV", "INTEGER", "REAL"}
 
 type Token struct {
 	Kind         tokenKind
@@ -75,11 +57,6 @@ func isChar(c byte) bool {
 
 func isSpace(c byte) bool {
 	return c == ' ' || c == '\n' || c == '\t'
-}
-
-func isOperator(c byte) bool {
-	_, found := operatorDictionary[string(c)]
-	return found
 }
 
 func contains(arr []string, s string) bool {
@@ -133,9 +110,8 @@ func lex(text string) ([]Token, error) {
 			}
 			i = j + 1
 			continue
-		case isOperator(c):
-			op, _ := operatorDictionary[string(c)]
-			token = Token{operatorKind, string(op), -1}
+		case contains(operatorList, string(c)):
+			token = Token{operatorKind, string(c), -1}
 		case isChar(c):
 			// multiple characters
 			j := i
