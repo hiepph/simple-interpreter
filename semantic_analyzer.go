@@ -63,13 +63,13 @@ func (t SymbolTable) String() string {
 func (t *SymbolTable) insert(symbol Symbol) {
 	// store scope for accessing variable's scope level
 	symbol.Scope = *t
-	log.Printf("INSERT: %s\n", symbol.Name)
+	// log.Printf("INSERT: %s\n", symbol.Name)
 	t.Symbols[symbol.Name] = symbol
 }
 
 func (t SymbolTable) lookup(name string) (Symbol, bool) {
-	log.Printf("LOOKUP: %s (scope name: %s)\n",
-		name, t.ScopeName)
+	// log.Printf("LOOKUP: %s (scope name: %s)\n",
+	// 	name, t.ScopeName)
 	s, ok := t.Symbols[name]
 	if ok {
 		return s, ok
@@ -80,6 +80,15 @@ func (t SymbolTable) lookup(name string) (Symbol, bool) {
 	}
 	// recursively search parent table
 	return t.EnclosingScope.(SymbolTable).lookup(name)
+}
+
+func (t SymbolTable) lookupCurrentScope(name string) (Symbol, bool) {
+	s, ok := t.Symbols[name]
+	if ok {
+		return s, ok
+	}
+
+	return Symbol{}, false
 }
 
 type SemanticAnalyzer struct {
@@ -192,10 +201,10 @@ func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
 	}
 	varName := node.(VarDecl).VarNode.Token.Value
 	varSymbol := NewVarSymbol(varName, typeSymbol)
-	// _, ok = sa.Table.lookup(varName)
-	// if ok {
-	// 	return errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
-	// }
+	_, ok = sa.Table.lookupCurrentScope(varName)
+	if ok {
+		return errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
+	}
 	sa.Table.insert(varSymbol)
 	return nil
 }

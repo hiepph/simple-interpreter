@@ -91,7 +91,10 @@ func (c *SourceToSourceCompiler) visitVarDecl(node AST) (string, error) {
 	varName := node.(VarDecl).VarNode.Token.Value
 	varSymbol := NewVarSymbol(varName, typeSymbol)
 
-	// TODO: duplication
+	_, ok = c.Table.lookupCurrentScope(varName)
+	if ok {
+		return "", errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
+	}
 
 	c.Table.insert(varSymbol)
 
