@@ -7,6 +7,24 @@ import (
 	"os"
 )
 
+type ErrorCode string
+
+const (
+	UnexpectedTokenError = "Unexpected Token"
+	IdNotFound           = "Identifier not found"
+	DuplicateID          = "Duplicate ID found"
+)
+
+type Error struct {
+	ErrorCode ErrorCode
+	Token     Token
+	Msg       string
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("%s", e.Msg)
+}
+
 func do(text string) (interface{}, error) {
 	// 1. lexing: decompose string into tokens
 	// also convert tokens into values based on their kinds
