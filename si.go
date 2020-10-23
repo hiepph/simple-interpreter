@@ -15,14 +15,23 @@ const (
 	DuplicateID          = "Duplicate ID found"
 )
 
+type ErrorType string
+
+const (
+	LexerErrorType    = "Lexer"
+	ParserErrorType   = "Parser"
+	SemanticErrorType = "Semantic"
+)
+
 type Error struct {
-	ErrorCode ErrorCode
-	Token     Token
-	Msg       string
+	Type   ErrorType
+	Code   ErrorCode
+	Token  Token
+	Lexeme rune
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s", e.Msg)
+	return fmt.Sprintf("%s<%d:%d:'%s'>: %s", e.Type, e.Token.Lineno, e.Token.Column, e.Lexeme, e.Code)
 }
 
 func do(text string) (interface{}, error) {

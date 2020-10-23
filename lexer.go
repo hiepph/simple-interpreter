@@ -45,6 +45,8 @@ type Token struct {
 	Kind         tokenKind
 	Value        string
 	NumericValue interface{}
+	Lineno       int
+	Column       int
 }
 
 func isDigit(c byte) bool {
@@ -71,6 +73,9 @@ func contains(arr []string, s string) bool {
 func lex(text string) ([]Token, error) {
 	tokens := make([]Token, 0)
 	var token Token
+
+	var column = 1
+	var lineno = 1
 	i := 0
 	for i < len(text) {
 		c := text[i]
@@ -83,6 +88,7 @@ func lex(text string) ([]Token, error) {
 				if text[j] == '.' {
 					numericType = "REAL_CONST"
 				}
+				column++
 			}
 
 			s := text[i:j]
@@ -101,21 +107,13 @@ func lex(text string) ([]Token, error) {
 				token = Token{numericKind, "REAL_CONST", v}
 			}
 			i = j - 1
-		case isSpace(c):
-			i++
-			continue
-		case c == '{': // comment
-			j := i
-			for ; j < len(text) && text[j] != '}'; j++ {
-			}
-			i = j + 1
-			continue
 		case contains(operatorList, string(c)):
 			token = Token{operatorKind, string(c), -1}
 		case isChar(c):
 			// multiple characters
 			j := i
 			for ; j < len(text) && (isDigit(text[j]) || isChar(text[j])); j++ {
+				column++
 			}
 			s := text[i:j]
 			if contains(keywordList, strings.ToUpper(s)) {
@@ -128,9 +126,17 @@ func lex(text string) ([]Token, error) {
 				token = Token{IDKind, s, -1}
 			}
 			i = j - 1
+		case c == '{': // comment
+			j := i
+			for ; j < len(text) && text[j] != '}'; j++ {
+				column++
+			}
+			i = j + 1
+			continue
 		case c == ':' && text[i+1] == '=':
 			token = Token{assignKind, ":=", -1}
 			i++
+			column++
 		case c == ':' && text[i+1] != '=':
 			token = Token{colonKind, ":", -1}
 		case c == ';':
@@ -139,6 +145,9 @@ func lex(text string) ([]Token, error) {
 			token = Token{dotKind, ".", -1}
 		case c == ',':
 			token = Token{commaKind, ",", -1}
+		case c == '\n':
+			lineno += 1
+			column = 0
 		default:
 			fmt.Println(string(c))
 			return tokens, errors.New("Error lexing input")
@@ -146,6 +155,7 @@ func lex(text string) ([]Token, error) {
 
 		tokens = append(tokens, token)
 		i++
+		column++
 	}
 
 	tokens = append(tokens,
