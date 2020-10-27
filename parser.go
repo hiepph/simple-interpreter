@@ -160,7 +160,7 @@ func NewParser(tokens []Token) Parser {
 
 func (parser Parser) currentToken() Token {
 	if parser.cur >= len(parser.tokens) {
-		return Token{EOFKind, "", -1}
+		return Token{EOFKind, "", -1, -1, -1}
 	}
 	return parser.tokens[parser.cur]
 }

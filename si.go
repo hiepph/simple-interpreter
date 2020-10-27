@@ -27,11 +27,11 @@ type Error struct {
 	Type   ErrorType
 	Code   ErrorCode
 	Token  Token
-	Lexeme rune
+	Lexeme string
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s<%d:%d:'%s'>: %s", e.Type, e.Token.Lineno, e.Token.Column, e.Lexeme, e.Code)
+	return fmt.Sprintf("[%s] %s '%s' <%d:%d>", e.Type, e.Code, e.Lexeme, e.Token.Lineno, e.Token.Column)
 }
 
 func do(text string) (interface{}, error) {
@@ -41,9 +41,9 @@ func do(text string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	// for i, token := range tokens {
-	// 	fmt.Println(i, token)
-	// }
+	for _, token := range tokens {
+		fmt.Println(token)
+	}
 
 	// 2. parser: build AST representation
 	parser := NewParser(tokens)
