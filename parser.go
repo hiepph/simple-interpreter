@@ -171,8 +171,7 @@ func (parser *Parser) eatOnlyKind(kind tokenKind) error {
 		parser.cur++
 		return nil
 	}
-	return errors.New(fmt.Sprintf("Error eating tokens %d: %v. "+
-		"want: %v, actual: %v", parser.cur, parser.tokens[parser.cur], kind, token.Kind))
+	return &ParserError{UnexpectedTokenError, token}
 }
 
 func (parser *Parser) eat(kind tokenKind, value string) error {
@@ -182,12 +181,7 @@ func (parser *Parser) eat(kind tokenKind, value string) error {
 		return nil
 	}
 
-	return errors.New(fmt.Sprintf("Error eating tokens %d: %v.\n"+
-		"> Kind, want: %v, actual: %v\n"+
-		"> Value, want: %v, actual: %v\n",
-		parser.cur, parser.tokens[parser.cur],
-		kind, token.Kind,
-		value, token.Value))
+	return &ParserError{UnexpectedTokenError, token}
 }
 
 func (parser *Parser) program() (AST, error) {
@@ -634,7 +628,7 @@ func (parser *Parser) typeSpec() (Type, error) {
 			return Type{}, err
 		}
 	} else {
-		return Type{}, errors.New(fmt.Sprintf("Error checking type, tokens %d: %v.", parser.cur, token))
+		return Type{}, &ParserError{KeywordNotFound, token}
 	}
 
 	return Type{token, token.NumericValue}, nil

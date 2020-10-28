@@ -38,6 +38,8 @@ func (c *SourceToSourceCompiler) visit(node AST) (string, error) {
 		return c.visitAssign(node)
 	case Var:
 		return c.visitVar(node)
+	case Num:
+		return c.visitNum(node)
 	default:
 		return "", errors.New(
 			fmt.Sprintf("(SourceToSourceCompiler) Unknown node type %T", node))
@@ -86,14 +88,14 @@ func (c *SourceToSourceCompiler) visitVarDecl(node AST) (string, error) {
 	typeName := node.(VarDecl).TypeNode.Token.Value
 	typeSymbol, ok := c.Table.lookup(typeName)
 	if !ok {
-		return "", errors.New(fmt.Sprintf("(VarDecl) Can't not find key %s\n", typeName))
+		return "", &CompilerError{KeywordNotFound, node.(VarDecl).TypeNode.Token}
 	}
 	varName := node.(VarDecl).VarNode.Token.Value
 	varSymbol := NewVarSymbol(varName, typeSymbol)
 
 	_, ok = c.Table.lookupCurrentScope(varName)
 	if ok {
-		return "", errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
+		return "", &CompilerError{DuplicateID, node.(VarDecl).VarNode.Token}
 	}
 
 	c.Table.insert(varSymbol)
@@ -190,11 +192,15 @@ func (c *SourceToSourceCompiler) visitVar(node AST) (string, error) {
 	varName := node.(Var).Value
 	varSymbol, ok := c.Table.lookup(varName)
 	if !ok {
-		return "", errors.New(fmt.Sprintf("(Var) Can't not find key %s\n", varName))
+		return "", &CompilerError{IdNotFound, node.(Var).Token}
 	}
 
 	return fmt.Sprintf("<%s%d:%s>", varName, varSymbol.Scope.ScopeLevel,
 		varSymbol.Type.(Symbol).Name), nil
+}
+
+func (c *SourceToSourceCompiler) visitNum(node AST) (string, error) {
+	return fmt.Sprint(node.(Num).Token.NumericValue), nil
 }
 
 func (c *SourceToSourceCompiler) visitBinOp(node AST) (string, error) {

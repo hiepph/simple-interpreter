@@ -162,7 +162,7 @@ func lex(text string) ([]Token, error) {
 			continue
 		default:
 			fmt.Println(string(c))
-			return tokens, &Error{LexerErrorType, UnexpectedTokenError, token, string(c)}
+			return tokens, &LexerError{UnexpectedTokenError, token, string(c)}
 		}
 
 		tokens = append(tokens, token)

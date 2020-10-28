@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -52,13 +51,13 @@ func NewSymbolTable(name string, level int) SymbolTable {
 	return t
 }
 
-func (t SymbolTable) String() string {
-	b, err := json.MarshalIndent(t, "", "  ")
-	if err == nil {
-		return string(b)
-	}
-	return ""
-}
+// func (t SymbolTable) String() string {
+// 	b, err := json.MarshalIndent(t, "", "  ")
+// 	if err == nil {
+// 		return string(b)
+// 	}
+// 	return ""
+// }
 
 func (t *SymbolTable) insert(symbol Symbol) {
 	// store scope for accessing variable's scope level
@@ -195,15 +194,13 @@ func (sa *SemanticAnalyzer) visitNoOp(node AST) error {
 
 func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
 	typeName := node.(VarDecl).TypeNode.Token.Value
-	typeSymbol, ok := sa.Table.lookup(typeName)
-	if !ok {
-		return errors.New(fmt.Sprintf("(VarDecl) Can't not find key %s\n", typeName))
-	}
+	typeSymbol, _ := sa.Table.lookup(typeName)
+
 	varName := node.(VarDecl).VarNode.Token.Value
 	varSymbol := NewVarSymbol(varName, typeSymbol)
-	_, ok = sa.Table.lookupCurrentScope(varName)
+	_, ok := sa.Table.lookupCurrentScope(varName)
 	if ok {
-		return errors.New(fmt.Sprintf("(VarDecl) Duplicate identifier %s\n", varName))
+		return &SemanticError{DuplicateID, node.(VarDecl).VarNode.Token}
 	}
 	sa.Table.insert(varSymbol)
 	return nil
@@ -237,7 +234,6 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 	if err != nil {
 		return err
 	}
-	log.Println(sa.Table)
 
 	// jump back into parent table
 	sa.Table = procedureScope.EnclosingScope.(SymbolTable)
@@ -259,7 +255,7 @@ func (sa *SemanticAnalyzer) visitVar(node AST) error {
 	varName := node.(Var).Value
 	_, ok := sa.Table.lookup(varName)
 	if !ok {
-		return errors.New(fmt.Sprintf("(Var) Can't not find key %s\n", varName))
+		return &SemanticError{IdNotFound, node.(Var).Token}
 	}
 
 	return nil
