@@ -170,7 +170,7 @@ func lex(text string) ([]Token, error) {
 		column++
 	}
 
-	tokens = append(tokens,
-		Token{EOFKind, "", -1, lineno, column})
+	// tokens = append(tokens,
+	// 	Token{EOFKind, "", -1, lineno, column})
 	return tokens, nil
 }

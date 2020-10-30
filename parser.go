@@ -29,6 +29,12 @@ type ProcedureDecl struct {
 	Params []Param
 }
 
+type ProcedureCall struct {
+	Name   string
+	Params []AST
+	Token  Token
+}
+
 type Param struct {
 	VarNode  Var
 	TypeNode Type
@@ -165,13 +171,21 @@ func (parser Parser) currentToken() Token {
 	return parser.tokens[parser.cur]
 }
 
+func (parser Parser) nextToken() Token {
+	if parser.cur+1 >= len(parser.tokens) {
+		return Token{EOFKind, "", -1, -1, -1}
+	}
+	return parser.tokens[parser.cur+1]
+}
+
 func (parser *Parser) eatOnlyKind(kind tokenKind) error {
 	token := parser.currentToken()
 	if token.Kind == kind {
 		parser.cur++
 		return nil
 	}
-	return &ParserError{UnexpectedTokenError, token}
+	// return &ParserError{UnexpectedTokenError, token}
+	return errors.New(fmt.Sprintf("want:%s", kind))
 }
 
 func (parser *Parser) eat(kind tokenKind, value string) error {
@@ -234,6 +248,51 @@ func (parser *Parser) compoundStatement() (AST, error) {
 	return root, nil
 }
 
+func (parser *Parser) proccallStatement() (AST, error) {
+	// proccall_statement: ID LPAREN (expr (COMMA expr)*)? RPAREN
+	token := parser.currentToken()
+
+	procName := token.Value
+	err := parser.eatOnlyKind(IDKind)
+	if err != nil {
+		return nil, err
+	}
+
+	err = parser.eat(operatorKind, "(")
+	if err != nil {
+		return nil, err
+	}
+
+	var params []AST
+	if parser.currentToken().Value != ")" {
+		node, err := parser.expr()
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, node)
+	}
+
+	for parser.currentToken().Value == "," {
+		err = parser.eatOnlyKind(commaKind)
+		if err != nil {
+			return nil, err
+		}
+
+		node, err := parser.expr()
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, node)
+	}
+
+	err = parser.eat(operatorKind, ")")
+	if err != nil {
+		return nil, err
+	}
+
+	return ProcedureCall{procName, params, token}, nil
+}
+
 func (parser *Parser) statementList() ([]AST, error) {
 	// statementList: statement
 	//              | statement SEMI statementList
@@ -265,6 +324,7 @@ func (parser *Parser) statementList() ([]AST, error) {
 
 func (parser *Parser) statement() (AST, error) {
 	// statement: compoundStatement
+	//          | proccallStatement
 	//          | assignStatement
 	//          | empty
 	token := parser.currentToken()
@@ -272,7 +332,11 @@ func (parser *Parser) statement() (AST, error) {
 	case token.Kind == keywordKind && token.Value == "BEGIN":
 		return parser.compoundStatement()
 	case token.Kind == IDKind:
-		return parser.assignStatement()
+		if parser.nextToken().Value[0] == '(' {
+			return parser.proccallStatement()
+		} else {
+			return parser.assignStatement()
+		}
 	default:
 		return parser.empty()
 	}
