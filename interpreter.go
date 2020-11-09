@@ -176,6 +176,10 @@ func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 	return nil, nil
 }
 
+func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
+	return nil, nil
+}
+
 func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 	switch node.(type) {
 	case BinOp:
@@ -202,6 +206,8 @@ func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 		return itpr.visitProcedureDecl(node)
 	case Type:
 		return itpr.visitType(node)
+	case ProcedureCall:
+		return itpr.visitProcedureCall(node)
 	default:
 		return nil, errors.New(
 			fmt.Sprintf("(interpreter) Unknown node type %T", node))

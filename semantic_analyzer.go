@@ -122,6 +122,8 @@ func (sa *SemanticAnalyzer) visit(node AST) error {
 		return sa.visitAssign(node)
 	case Var:
 		return sa.visitVar(node)
+	case ProcedureCall:
+		return sa.visitProcedureCall(node)
 	default:
 		return errors.New(
 			fmt.Sprintf("(SemanticAnalyzer) Unknown node type %T", node))
@@ -239,6 +241,17 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 	sa.Table = procedureScope.EnclosingScope.(SymbolTable)
 
 	log.Printf("LEAVE scope: %s\n", procName)
+	return nil
+}
+
+func (sa *SemanticAnalyzer) visitProcedureCall(node AST) error {
+	for _, paramNode := range node.(ProcedureCall).Params {
+		err := sa.visit(paramNode)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

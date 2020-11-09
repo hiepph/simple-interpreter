@@ -147,6 +147,11 @@ func draw(node AST, indicator string) {
 		children = append(children, node.(BinOp).Right)
 	case Num:
 		fmt.Printf("%v\n", node.(Num).Token.NumericValue)
+	case ProcedureCall:
+		fmt.Printf("%T:%s\n", node, node.(ProcedureCall).Name)
+		for _, param := range node.(ProcedureCall).Params {
+			children = append(children, param)
+		}
 	default:
 		fmt.Printf("%T\n", node)
 	}

@@ -63,7 +63,7 @@ func (e *CompilerError) Error() string {
 }
 
 func do(text string) (interface{}, error) {
-	// 1. lexing: decompose string into tokens
+	// lexing: decompose string into tokens
 	// also convert tokens into values based on their kinds
 	tokens, err := lex(text)
 	if err != nil {
@@ -73,7 +73,7 @@ func do(text string) (interface{}, error) {
 	// 	fmt.Println(token)
 	// }
 
-	// 2. parser: build AST representation
+	// parser: build AST representation
 	parser := NewParser(tokens)
 	node, err := parser.parse()
 	if err != nil {
@@ -81,22 +81,23 @@ func do(text string) (interface{}, error) {
 	}
 	draw(node, "")
 
-	// 3. interpreter: generate result
-	// semanticAnalyzer := NewSemanticAnalyzer()
-	// err = semanticAnalyzer.visit(node)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// source-to-source compiler
-	src2srcCompiler := NewSourceToSourceCompiler()
-	s, err := src2srcCompiler.visit(node)
+	// semantic checking
+	semanticAnalyzer := NewSemanticAnalyzer()
+	err = semanticAnalyzer.visit(node)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("------ Compiler -----------")
-	fmt.Println(s)
 
+	// source-to-source compiler
+	// src2srcCompiler := NewSourceToSourceCompiler()
+	// s, err := src2srcCompiler.visit(node)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// fmt.Println("------ Compiler -----------")
+	// fmt.Println(s)
+
+	// interpreter: generate result
 	// itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
 	// _, err = itpr.interprete()
 	// if err != nil {
