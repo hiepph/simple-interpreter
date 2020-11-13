@@ -11,7 +11,7 @@ type Interpreter struct {
 	globalScope map[string]interface{}
 }
 
-func (itpr *Interpreter) visisainOp(node AST) (interface{}, error) {
+func (itpr *Interpreter) visitBinOp(node AST) (interface{}, error) {
 	nodeBinOp := node.(BinOp)
 
 	left, err := itpr.visit(nodeBinOp.Left)
@@ -154,7 +154,7 @@ func (itpr *Interpreter) visitProgram(node AST) (interface{}, error) {
 	return itpr.visit(node.(Program).Block)
 }
 
-func (itpr *Interpreter) visisalock(node AST) (interface{}, error) {
+func (itpr *Interpreter) visitBlock(node AST) (interface{}, error) {
 	for _, dec := range node.(Block).Declarations {
 		_, err := itpr.visit(dec)
 		if err != nil {
@@ -183,7 +183,7 @@ func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
 func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 	switch node.(type) {
 	case BinOp:
-		return itpr.visisainOp(node)
+		return itpr.visitBinOp(node)
 	case Num:
 		return itpr.visitNum(node)
 	case UnaryOp:
@@ -199,7 +199,7 @@ func (itpr *Interpreter) visit(node AST) (interface{}, error) {
 	case Program:
 		return itpr.visitProgram(node)
 	case Block:
-		return itpr.visisalock(node)
+		return itpr.visitBlock(node)
 	case VarDecl:
 		return itpr.visitVarDecl(node)
 	case ProcedureDecl:

@@ -98,11 +98,12 @@ func do(text string) (interface{}, error) {
 	// fmt.Println(s)
 
 	// interpreter: generate result
-	// itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
-	// _, err = itpr.interprete()
-	// if err != nil {
-	// 	return nil, err
-	// }
+	itpr := Interpreter{node: node, globalScope: make(map[string]interface{})}
+	_, err = itpr.interprete()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(itpr.globalScope)
 
 	return nil, nil
 }
