@@ -6,6 +6,45 @@ import (
 	"reflect"
 )
 
+type Stack struct {
+	Items []interface{}
+}
+
+func (s *Stack) push(item interface{}) {
+	s.Items = append(s.Items, item)
+}
+
+func (s *Stack) pop() interface{} {
+	var lastItem = s.Items[len(s.Items)-1]
+	s.Items = s.Items[:len(s.Items)-1]
+	return lastItem
+}
+
+func (s Stack) peek() interface{} {
+	return s.Items[len(s.Items)-1]
+}
+
+type ARType string
+
+const (
+	ProgramType ARType = "PROGRAM"
+)
+
+type ActivationRecord struct {
+	Name         string
+	Type         string
+	NestingLevel int
+	Members      map[string]interface{}
+}
+
+func (ar *ActivationRecord) set(k string, v interface{}) {
+	ar.Members[k] = v
+}
+
+func (ar ActivationRecord) get(k string) interface{} {
+	return ar.Members[k]
+}
+
 type Interpreter struct {
 	node        AST
 	globalScope map[string]interface{}
