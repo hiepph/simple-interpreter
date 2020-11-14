@@ -28,7 +28,8 @@ func (s Stack) peek() ActivationRecord {
 type ARType string
 
 const (
-	ProgramType ARType = "PROGRAM"
+	ProgramType   ARType = "PROGRAM"
+	ProcedureType ARType = "PROCEDURE"
 )
 
 type ActivationRecord struct {
@@ -230,6 +231,14 @@ func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 }
 
 func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
+	// procName := node.(ProcedureCall).Name
+	// ar := ActivationRecord{
+	// 	Name:         procName,
+	// 	Type:         ProcedureType,
+	// 	NestingLevel: 2,
+	// 	Members:      make(map[string]interface{})}
+	procSymbol := node.(ProcedureCall).Symbol
+	fmt.Println(procSymbol.Name)
 	return nil, nil
 }
 

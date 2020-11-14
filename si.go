@@ -83,7 +83,7 @@ func do(text string) (interface{}, error) {
 
 	// semantic checking
 	semanticAnalyzer := NewSemanticAnalyzer()
-	err = semanticAnalyzer.visit(node)
+	node, err = semanticAnalyzer.visit(node)
 	if err != nil {
 		return nil, err
 	}

@@ -98,7 +98,7 @@ func NewSemanticAnalyzer() SemanticAnalyzer {
 	return SemanticAnalyzer{}
 }
 
-func (sa *SemanticAnalyzer) visit(node AST) error {
+func (sa *SemanticAnalyzer) visit(node AST) (AST, error) {
 	switch node.(type) {
 	case Program:
 		return sa.visitProgram(node)
@@ -125,76 +125,93 @@ func (sa *SemanticAnalyzer) visit(node AST) error {
 	case ProcedureCall:
 		return sa.visitProcedureCall(node)
 	default:
-		return errors.New(
+		return nil, errors.New(
 			fmt.Sprintf("(SemanticAnalyzer) Unknown node type %T", node))
 	}
 }
 
-func (sa *SemanticAnalyzer) visitBlock(node AST) error {
+func (sa *SemanticAnalyzer) visitBlock(node AST) (AST, error) {
+	var newDeclarations []Decl
 	for _, dec := range node.(Block).Declarations {
-		err := sa.visit(dec)
+		newNode, err := sa.visit(dec)
+		newDeclarations = append(newDeclarations, newNode.(Decl))
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return sa.visit(node.(Block).CompoundStatement)
+	var newBlock = node.(Block)
+	newBlock.Declarations = newDeclarations
+
+	newCompound, err := sa.visit(newBlock.CompoundStatement)
+	newBlock.CompoundStatement = newCompound.(Compound)
+	return newBlock, err
 }
 
-func (sa *SemanticAnalyzer) visitProgram(node AST) error {
+func (sa *SemanticAnalyzer) visitProgram(node AST) (AST, error) {
 	log.Println("ENTER scope: global")
 	globalScope := NewSymbolTable("global", 1)
 	globalScope.insert(intType)
 	globalScope.insert(realType)
 	sa.Table = globalScope
 
-	err := sa.visit(node.(Program).Block)
+	blockNode, err := sa.visit(node.(Program).Block)
+	var newProgram = node.(Program)
+	newProgram.Block = blockNode.(Block)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Println("LEAVE scope: global")
-	return nil
+	return newProgram, nil
 }
 
-func (sa *SemanticAnalyzer) visitBinOp(node AST) error {
+func (sa *SemanticAnalyzer) visitBinOp(node AST) (AST, error) {
 	nodeBinOp := node.(BinOp)
 
-	err := sa.visit(nodeBinOp.Left)
+	_, err := sa.visit(nodeBinOp.Left)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = sa.visit(nodeBinOp.Right)
+	_, err = sa.visit(nodeBinOp.Right)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return node, nil
 }
 
-func (sa *SemanticAnalyzer) visitNum(node AST) error {
-	return nil
+func (sa *SemanticAnalyzer) visitNum(node AST) (AST, error) {
+	return node, nil
 }
 
-func (sa *SemanticAnalyzer) visitUnaryOp(node AST) error {
+func (sa *SemanticAnalyzer) visitUnaryOp(node AST) (AST, error) {
 	return sa.visit(node.(UnaryOp).expr)
 }
 
-func (sa *SemanticAnalyzer) visitCompound(node AST) error {
+func (sa *SemanticAnalyzer) visitCompound(node AST) (AST, error) {
+	var newChildren []AST
 	for _, child := range node.(Compound).Children {
-		err := sa.visit(child)
+		newNode, err := sa.visit(child)
+		newChildren = append(newChildren, newNode)
+		switch child.(type) {
+		case ProcedureCall:
+		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	var newCompound = node.(Compound)
+	newCompound.Children = newChildren
+
+	return newCompound, nil
 }
 
-func (sa *SemanticAnalyzer) visitNoOp(node AST) error {
-	return nil
+func (sa *SemanticAnalyzer) visitNoOp(node AST) (AST, error) {
+	return node, nil
 }
 
-func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
+func (sa *SemanticAnalyzer) visitVarDecl(node AST) (AST, error) {
 	typeName := node.(VarDecl).TypeNode.Token.Value
 	typeSymbol, _ := sa.Table.lookup(typeName)
 
@@ -202,13 +219,14 @@ func (sa *SemanticAnalyzer) visitVarDecl(node AST) error {
 	varSymbol := NewVarSymbol(varName, typeSymbol)
 	_, ok := sa.Table.lookupCurrentScope(varName)
 	if ok {
-		return &SemanticError{DuplicateID, node.(VarDecl).VarNode.Token}
+		return nil, &SemanticError{DuplicateID,
+			node.(VarDecl).VarNode.Token}
 	}
 	sa.Table.insert(varSymbol)
-	return nil
+	return node, nil
 }
 
-func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
+func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) (AST, error) {
 	procName := node.(ProcedureDecl).Name
 	procSymbol := NewProcedureSymbol(procName)
 	sa.Table.insert(procSymbol)
@@ -224,7 +242,7 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 		typeName := param.TypeNode.Token.Value
 		paramType, ok := sa.Table.lookup(typeName)
 		if !ok {
-			return errors.New(fmt.Sprintf("(ProcedureDecl) Can't not find key %s\n", typeName))
+			return nil, errors.New(fmt.Sprintf("(ProcedureDecl) Can't not find key %s\n", typeName))
 		}
 		paramName := param.VarNode.Token.Value
 		varSymbol := NewVarSymbol(paramName, paramType)
@@ -232,44 +250,52 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) error {
 		procSymbol.addParam(varSymbol)
 	}
 
-	err := sa.visit(node.(ProcedureDecl).Block)
+	_, err := sa.visit(node.(ProcedureDecl).Block)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// jump back into parent table
 	sa.Table = procedureScope.EnclosingScope.(SymbolTable)
 
 	log.Printf("LEAVE scope: %s\n", procName)
-	return nil
+	return node, nil
 }
 
-func (sa *SemanticAnalyzer) visitProcedureCall(node AST) error {
+func (sa *SemanticAnalyzer) visitProcedureCall(node AST) (AST, error) {
 	for _, paramNode := range node.(ProcedureCall).Params {
-		err := sa.visit(paramNode)
+		_, err := sa.visit(paramNode)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
+	procName := node.(ProcedureCall).Name
+	procSymbol, ok := sa.Table.lookup(procName)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf(
+			"(ProcedureCall) Can't find key %s", procName))
+	}
+	var newProc = node.(ProcedureCall)
+	newProc.Symbol = procSymbol
 
-	return nil
+	return newProc, nil
 }
 
-func (sa *SemanticAnalyzer) visitAssign(node AST) error {
+func (sa *SemanticAnalyzer) visitAssign(node AST) (AST, error) {
 	varName := node.(Assign).Left.(Var).Value
 	_, ok := sa.Table.lookup(varName)
 	if !ok {
-		return errors.New(fmt.Sprintf("(Assign) Can't not find key %s\n", varName))
+		return nil, errors.New(fmt.Sprintf("(Assign) Can't find key %s\n", varName))
 	}
 	return sa.visit(node.(Assign).Right)
 }
 
-func (sa *SemanticAnalyzer) visitVar(node AST) error {
+func (sa *SemanticAnalyzer) visitVar(node AST) (AST, error) {
 	varName := node.(Var).Value
 	_, ok := sa.Table.lookup(varName)
 	if !ok {
-		return &SemanticError{IdNotFound, node.(Var).Token}
+		return nil, &SemanticError{IdNotFound, node.(Var).Token}
 	}
 
-	return nil
+	return node, nil
 }

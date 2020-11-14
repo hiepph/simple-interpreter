@@ -33,6 +33,7 @@ type ProcedureCall struct {
 	Name   string
 	Params []AST
 	Token  Token
+	Symbol Symbol
 }
 
 type Param struct {
@@ -295,7 +296,7 @@ func (parser *Parser) proccallStatement() (AST, error) {
 		return nil, err
 	}
 
-	return ProcedureCall{procName, params, token}, nil
+	return ProcedureCall{procName, params, token, Symbol{}}, nil
 }
 
 func (parser *Parser) statementList() ([]AST, error) {
