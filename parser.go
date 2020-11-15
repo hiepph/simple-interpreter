@@ -149,7 +149,9 @@ func draw(node AST, indicator string) {
 	case Num:
 		fmt.Printf("%v\n", node.(Num).Token.NumericValue)
 	case ProcedureCall:
-		fmt.Printf("%T:%s\n", node, node.(ProcedureCall).Name)
+		// fmt.Printf("%T:%s\n", node, node.(ProcedureCall).Name)
+		fmt.Printf("%T:%s<%s>\n", node, node.(ProcedureCall).Name,
+			node.(ProcedureCall).Symbol.Name)
 		for _, param := range node.(ProcedureCall).Params {
 			children = append(children, param)
 		}

@@ -232,15 +232,19 @@ func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 
 func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
 	procName := node.(ProcedureCall).Name
+	procSymbol := node.(ProcedureCall).Symbol // BUG: beta, why is this None?
 	ar := ActivationRecord{
 		Name:         procName,
 		Type:         ProcedureType,
-		NestingLevel: 2,
+		NestingLevel: procSymbol.ScopeLevel + 1,
 		Members:      make(map[string]interface{})}
-
-	procSymbol := node.(ProcedureCall).Symbol
 	formalParams := procSymbol.Params
 	actualParams := node.(ProcedureCall).Params
+	if len(formalParams) != len(actualParams) {
+		panic(fmt.Sprintf("Length formal params %d # actual params %d",
+			len(formalParams),
+			len(actualParams)))
+	}
 	for i := 0; i < len(actualParams); i++ {
 		argumentNode, err := itpr.visit(actualParams[i])
 		if err != nil {
@@ -253,7 +257,7 @@ func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
 	log.Printf("ENTER: PROCEDURE %s\n", procName)
 	log.Println(ar)
 	// evaluate the procedure body
-	itpr.visit(procSymbol.Block)
+	itpr.visit(procSymbol.Block) // BUG: here? Block is not updated with name?
 	log.Printf("LEAVE: PROCEDURE %s\n", procName)
 	itpr.CallStack.pop()
 	log.Println(ar)

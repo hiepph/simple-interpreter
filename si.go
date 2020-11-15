@@ -98,6 +98,7 @@ func do(text string) (interface{}, error) {
 	// fmt.Println(s)
 
 	// interpreter: generate result
+	fmt.Println("----------------")
 	itpr := Interpreter{node: node}
 	_, err = itpr.interprete()
 	if err != nil {

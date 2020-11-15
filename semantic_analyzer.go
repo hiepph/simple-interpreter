@@ -7,26 +7,27 @@ import (
 )
 
 type Symbol struct {
-	Name   string
-	Type   interface{}
-	Params []interface{}
-	Scope  SymbolTable
-	Block  AST // procSymbol
+	Name       string
+	Type       interface{}
+	Params     []interface{}
+	Scope      SymbolTable
+	ScopeLevel int
+	Block      AST
 }
 
 func NewBuiltinTypeSymbol(name string) Symbol {
 	var noParams []interface{}
-	return Symbol{name, "BUILT-IN", noParams, SymbolTable{}, nil}
+	return Symbol{name, "BUILT-IN", noParams, SymbolTable{}, 0, nil}
 }
 
 func NewVarSymbol(name string, typ Symbol) Symbol {
 	var noParams []interface{}
-	return Symbol{name, typ, noParams, SymbolTable{}, nil}
+	return Symbol{name, typ, noParams, SymbolTable{}, 0, nil}
 }
 
 func NewProcedureSymbol(name string) Symbol {
 	var noParams []interface{}
-	return Symbol{name, "Procedure", noParams, SymbolTable{}, nil}
+	return Symbol{name, "Procedure", noParams, SymbolTable{}, 0, nil}
 }
 
 func (s *Symbol) addParam(param Symbol) {
@@ -64,6 +65,7 @@ func (t *SymbolTable) insert(symbol Symbol) {
 	// store scope for accessing variable's scope level
 	symbol.Scope = *t
 	// log.Printf("INSERT: %s\n", symbol.Name)
+	symbol.ScopeLevel = t.ScopeLevel
 	t.Symbols[symbol.Name] = symbol
 }
 
@@ -135,10 +137,10 @@ func (sa *SemanticAnalyzer) visitBlock(node AST) (AST, error) {
 	var newDeclarations []Decl
 	for _, dec := range node.(Block).Declarations {
 		newNode, err := sa.visit(dec)
-		newDeclarations = append(newDeclarations, newNode.(Decl))
 		if err != nil {
 			return nil, err
 		}
+		newDeclarations = append(newDeclarations, newNode.(Decl))
 	}
 	var newBlock = node.(Block)
 	newBlock.Declarations = newDeclarations
@@ -169,16 +171,20 @@ func (sa *SemanticAnalyzer) visitProgram(node AST) (AST, error) {
 func (sa *SemanticAnalyzer) visitBinOp(node AST) (AST, error) {
 	nodeBinOp := node.(BinOp)
 
-	_, err := sa.visit(nodeBinOp.Left)
+	leftNode, err := sa.visit(nodeBinOp.Left)
 	if err != nil {
 		return nil, err
 	}
-	_, err = sa.visit(nodeBinOp.Right)
+	rightNode, err := sa.visit(nodeBinOp.Right)
 	if err != nil {
 		return nil, err
 	}
 
-	return node, nil
+	var newBinOp = node.(BinOp)
+	newBinOp.Left = leftNode
+	newBinOp.Right = rightNode
+
+	return newBinOp, nil
 }
 
 func (sa *SemanticAnalyzer) visitNum(node AST) (AST, error) {
@@ -186,20 +192,23 @@ func (sa *SemanticAnalyzer) visitNum(node AST) (AST, error) {
 }
 
 func (sa *SemanticAnalyzer) visitUnaryOp(node AST) (AST, error) {
-	return sa.visit(node.(UnaryOp).expr)
+	newExpr, err := sa.visit(node.(UnaryOp).expr)
+	if err != nil {
+		return nil, err
+	}
+	var newNode = node.(UnaryOp)
+	newNode.expr = newExpr
+	return newNode, nil
 }
 
 func (sa *SemanticAnalyzer) visitCompound(node AST) (AST, error) {
 	var newChildren []AST
 	for _, child := range node.(Compound).Children {
 		newNode, err := sa.visit(child)
-		newChildren = append(newChildren, newNode)
-		switch child.(type) {
-		case ProcedureCall:
-		}
 		if err != nil {
 			return nil, err
 		}
+		newChildren = append(newChildren, newNode)
 	}
 
 	var newCompound = node.(Compound)
@@ -250,38 +259,46 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) (AST, error) {
 		sa.Table.insert(varSymbol)
 		// NOTE: need to replace this updated value inside the table
 		procSymbol.addParam(varSymbol)
+		// sa.Table.insert(procSymbol)
 	}
 
-	_, err := sa.visit(node.(ProcedureDecl).Block)
+	blockNode, err := sa.visit(node.(ProcedureDecl).Block)
 	if err != nil {
 		return nil, err
 	}
+	var newProcedureDecl = node.(ProcedureDecl)
+	newProcedureDecl.Block = blockNode.(Block)
 
 	// jump back into parent table
 	sa.Table = procedureScope.EnclosingScope.(SymbolTable)
 
 	// accessed by the interpreter when executing procedure call
-	procSymbol.Block = node.(ProcedureDecl).Block
+	// NOTE: need to update the procSymbol followed new value of Block
+	procSymbol.Block = newProcedureDecl.Block
 	sa.Table.insert(procSymbol)
 	log.Printf("LEAVE scope: %s\n", procName)
 
-	return node, nil
+	return newProcedureDecl, nil
 }
 
 func (sa *SemanticAnalyzer) visitProcedureCall(node AST) (AST, error) {
+	var newParams []AST
 	for _, paramNode := range node.(ProcedureCall).Params {
-		_, err := sa.visit(paramNode)
+		newParamNode, err := sa.visit(paramNode)
+		newParams = append(newParams, newParamNode)
 		if err != nil {
 			return nil, err
 		}
 	}
+	var newProc = node.(ProcedureCall)
+	newProc.Params = newParams
+
 	procName := node.(ProcedureCall).Name
 	procSymbol, ok := sa.Table.lookup(procName)
 	if !ok {
 		return nil, errors.New(fmt.Sprintf(
 			"(ProcedureCall) Can't find key %s", procName))
 	}
-	var newProc = node.(ProcedureCall)
 	newProc.Symbol = procSymbol
 
 	return newProc, nil
@@ -293,7 +310,14 @@ func (sa *SemanticAnalyzer) visitAssign(node AST) (AST, error) {
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("(Assign) Can't find key %s\n", varName))
 	}
-	return sa.visit(node.(Assign).Right)
+
+	var newNode = node.(Assign)
+	rightNode, err := sa.visit(node.(Assign).Right)
+	if err != nil {
+		return nil, err
+	}
+	newNode.Right = rightNode
+	return newNode, nil
 }
 
 func (sa *SemanticAnalyzer) visitVar(node AST) (AST, error) {
