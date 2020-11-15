@@ -232,7 +232,7 @@ func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 
 func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
 	procName := node.(ProcedureCall).Name
-	procSymbol := node.(ProcedureCall).Symbol // BUG: beta, why is this None?
+	procSymbol := node.(ProcedureCall).Symbol
 	ar := ActivationRecord{
 		Name:         procName,
 		Type:         ProcedureType,
@@ -257,7 +257,7 @@ func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
 	log.Printf("ENTER: PROCEDURE %s\n", procName)
 	log.Println(ar)
 	// evaluate the procedure body
-	itpr.visit(procSymbol.Block) // BUG: here? Block is not updated with name?
+	itpr.visit(procSymbol.Block)
 	log.Printf("LEAVE: PROCEDURE %s\n", procName)
 	itpr.CallStack.pop()
 	log.Println(ar)
