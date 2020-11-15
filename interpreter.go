@@ -231,14 +231,33 @@ func (itpr *Interpreter) visitType(node AST) (interface{}, error) {
 }
 
 func (itpr *Interpreter) visitProcedureCall(node AST) (interface{}, error) {
-	// procName := node.(ProcedureCall).Name
-	// ar := ActivationRecord{
-	// 	Name:         procName,
-	// 	Type:         ProcedureType,
-	// 	NestingLevel: 2,
-	// 	Members:      make(map[string]interface{})}
+	procName := node.(ProcedureCall).Name
+	ar := ActivationRecord{
+		Name:         procName,
+		Type:         ProcedureType,
+		NestingLevel: 2,
+		Members:      make(map[string]interface{})}
+
 	procSymbol := node.(ProcedureCall).Symbol
-	fmt.Println(procSymbol.Name)
+	formalParams := procSymbol.Params
+	actualParams := node.(ProcedureCall).Params
+	for i := 0; i < len(actualParams); i++ {
+		argumentNode, err := itpr.visit(actualParams[i])
+		if err != nil {
+			return nil, err
+		}
+		ar.set(formalParams[i].(Symbol).Name, argumentNode)
+	}
+	itpr.CallStack.push(ar)
+
+	log.Printf("ENTER: PROCEDURE %s\n", procName)
+	log.Println(ar)
+	// evaluate the procedure body
+	itpr.visit(procSymbol.Block)
+	log.Printf("LEAVE: PROCEDURE %s\n", procName)
+	itpr.CallStack.pop()
+	log.Println(ar)
+
 	return nil, nil
 }
 

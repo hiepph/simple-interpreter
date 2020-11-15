@@ -11,21 +11,22 @@ type Symbol struct {
 	Type   interface{}
 	Params []interface{}
 	Scope  SymbolTable
+	Block  AST // procSymbol
 }
 
 func NewBuiltinTypeSymbol(name string) Symbol {
 	var noParams []interface{}
-	return Symbol{name, "BUILT-IN", noParams, SymbolTable{}}
+	return Symbol{name, "BUILT-IN", noParams, SymbolTable{}, nil}
 }
 
 func NewVarSymbol(name string, typ Symbol) Symbol {
 	var noParams []interface{}
-	return Symbol{name, typ, noParams, SymbolTable{}}
+	return Symbol{name, typ, noParams, SymbolTable{}, nil}
 }
 
 func NewProcedureSymbol(name string) Symbol {
 	var noParams []interface{}
-	return Symbol{name, "Procedure", noParams, SymbolTable{}}
+	return Symbol{name, "Procedure", noParams, SymbolTable{}, nil}
 }
 
 func (s *Symbol) addParam(param Symbol) {
@@ -247,6 +248,7 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) (AST, error) {
 		paramName := param.VarNode.Token.Value
 		varSymbol := NewVarSymbol(paramName, paramType)
 		sa.Table.insert(varSymbol)
+		// NOTE: need to replace this updated value inside the table
 		procSymbol.addParam(varSymbol)
 	}
 
@@ -258,7 +260,11 @@ func (sa *SemanticAnalyzer) visitProcedureDecl(node AST) (AST, error) {
 	// jump back into parent table
 	sa.Table = procedureScope.EnclosingScope.(SymbolTable)
 
+	// accessed by the interpreter when executing procedure call
+	procSymbol.Block = node.(ProcedureDecl).Block
+	sa.Table.insert(procSymbol)
 	log.Printf("LEAVE scope: %s\n", procName)
+
 	return node, nil
 }
 
